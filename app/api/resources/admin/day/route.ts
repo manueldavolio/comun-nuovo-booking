@@ -1,48 +1,66 @@
-import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const date = url.searchParams.get("date"); // YYYY-MM-DD
+  const { searchParams } = new URL(req.url)
 
-  if (!date) return NextResponse.json({ error: "Missing date" }, { status: 400 });
+  const date = searchParams.get("date")
 
-  const start = new Date(`${date}T00:00:00.000Z`);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+  if (!date) {
+    return NextResponse.json({ error: "missing date" }, { status: 400 })
+  }
 
-  const startISO = start.toISOString();
-  const endISO = end.toISOString();
-
-  const { data: resources, error: rErr } = await supabase
-    .from("resources")
-    .select("id,name,is_public,is_active")
-    .eq("is_active", true)
-    .order("name");
-
-  if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 });
-
-  const { data: bookings, error: bErr } = await supabase
+  const { data: bookings } = await supabase
     .from("bookings")
-    .select("id,resource_id,user_name,user_phone,start_ts,end_ts,status,pay_mode")
-    .in("status", ["PENDING_PAYMENT", "CONFIRMED"])
-    .lt("start_ts", endISO)
-    .gt("end_ts", startISO);
+    .select("*")
+    .eq("date", date)
 
-  if (bErr) return NextResponse.json({ error: bErr.message }, { status: 500 });
+  const startHour = 5
+  const endHour = 23
+  const step = 30
 
-  const { data: blocks, error: blErr } = await supabase
-    .from("admin_blocks")
-    .select("id,resource_id,start_ts,end_ts,note")
-    .lt("start_ts", endISO)
-    .gt("end_ts", startISO);
+  const slots: any[] = []
 
-  if (blErr) return NextResponse.json({ error: blErr.message }, { status: 500 });
+  for (let h = startHour; h <= endHour; h++) {
+    for (let m = 0; m < 60; m += step) {
 
-  return NextResponse.json({
-    date,
-    resources: resources ?? [],
-    bookings: bookings ?? [],
-    blocks: blocks ?? [],
-  });
+      const time =
+        ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}
+
+      slots.push({
+        time,
+        date,
+        booking: bookings?.find(b => b.time === time) || null
+      })
+    }
+  }
+
+  // ---------------------------
+  // BLOCCO ALLENAMENTI
+  // ---------------------------
+
+  const trainingBlocks = [
+    { day: 1, start: "19:00", end: "21:00" }, // lunedì
+    { day: 3, start: "19:00", end: "21:00" }  // mercoledì
+  ]
+
+  const dayOfWeek = new Date(date).getDay()
+
+  const filteredSlots = slots.filter(slot => {
+
+    const blocked = trainingBlocks.find(b =>
+      b.day === dayOfWeek &&
+      slot.time >= b.start &&
+      slot.time < b.end
+    )
+
+    return !blocked
+  })
+
+  return NextResponse.json({ slots: filteredSlots })
 }
