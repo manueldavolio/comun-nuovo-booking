@@ -1,63 +1,58 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date");
 
     if (!date) {
-      return NextResponse.json({ error: "missing date" }, { status: 400 });
+      return NextResponse.json({ error: "Missing date" }, { status: 400 });
     }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
 
     const { data: bookings, error } = await supabase
       .from("bookings")
       .select("*")
-      .eq("date", date);
+      .gte("start_ts", ${date}T00:00:00)
+      .lt("start_ts", ${date}T23:59:59);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      throw error;
     }
 
-    const startHour = 5;
-    const endHour = 23;
-    const step = 30;
+    const slots = [];
+    let hour = 15;
+    let minute = 30;
 
-    const slots: any[] = [];
+    while (hour < 23) {
+      const time = ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")};
 
-    for (let h = startHour; h <= endHour; h++) {
-      for (let m = 0; m < 60; m += step) {
+      const booking = bookings?.find((b) =>
+        b.start_ts.includes(${date}T${time})
+      );
 
-        const hour = String(h).padStart(2, "0");
-        const min = String(m).padStart(2, "0");
-        const time = hour + ":" + min;
+      slots.push({
+        time,
+        booking: booking || null,
+      });
 
-        slots.push({
-          time,
-          date,
-          booking: bookings?.find((b: any) => b.time === time) || null,
-        });
-
+      minute += 30;
+      if (minute === 60) {
+        minute = 0;
+        hour++;
       }
     }
 
-    return NextResponse.json({
-      slots
-    });
-
+    return NextResponse.json({ slots });
   } catch (err: any) {
-
     return NextResponse.json(
-      {
-        error: err?.message || "server error"
-      },
+      { error: err?.message || "server error" },
       { status: 500 }
     );
-
   }
 }
