@@ -19,10 +19,10 @@ export async function GET(req: Request) {
     );
 
     const { data: bookings, error } = await supabase
-      .from("bookings")
-      .select("*")
-      .gte("start_ts", ${date}T00:00:00)
-      .lt("start_ts", ${date}T23:59:59);
+  .from("bookings")
+  .select("*")
+  .gte("start_ts", `${date}T00:00:00)
+  .lt("start_ts", `${date}T23:59:59);
 
     if (error) {
       throw error;
