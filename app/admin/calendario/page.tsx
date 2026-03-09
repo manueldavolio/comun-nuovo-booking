@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Resource = { id: string; name: string; is_active: boolean; is_public: boolean };
+type Resource = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  is_public: boolean;
+};
 
 type Booking = {
   id: string;
@@ -14,7 +19,6 @@ type Booking = {
   status: string;
   pay_mode: string;
   total_amount_cents?: number | null;
-  deposit_amount_cents?: number | null;
   paid_amount_cents?: number | null;
   paid_method?: string | null;
   paid_at?: string | null;
@@ -27,7 +31,6 @@ type Block = {
   start_ts: string;
   end_ts: string;
   reason?: string | null;
-  note?: string | null;
 };
 
 function todayISODate() {
@@ -39,7 +42,10 @@ function todayISODate() {
 }
 
 function hhmm(iso: string) {
-  return new Date(iso).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function eurFromCents(cents?: number | null) {
@@ -49,7 +55,7 @@ function eurFromCents(cents?: number | null) {
 
 function getSchedule(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00.000Z`);
-  const day = d.getUTCDay(); // 0 dom, 6 sab
+  const day = d.getUTCDay(); // 0 domenica, 6 sabato
   const isWeekend = day === 0 || day === 6;
   if (isWeekend) return { openH: 8, openM: 0, closeH: 23, closeM: 0 };
   return { openH: 15, openM: 30, closeH: 23, closeM: 0 };
@@ -74,15 +80,27 @@ export default function CalendarioAdmin() {
   const colW = 260;
   const rowH = 46;
 
-  const dayBase = useMemo(() => new Date(`${date}T00:00:00.000Z`).getTime(), [date]);
-  const dayStart = useMemo(() => dayBase + (openH * 60 + openM) * 60 * 1000, [dayBase, openH, openM]);
-  const dayEnd = useMemo(() => dayBase + (closeH * 60 + closeM) * 60 * 1000, [dayBase, closeH, closeM]);
+  const dayBase = useMemo(
+    () => new Date(`${date}T00:00:00.000Z`).getTime(),
+    [date]
+  );
+  const dayStart = useMemo(
+    () => dayBase + (openH * 60 + openM) * 60 * 1000,
+    [dayBase, openH, openM]
+  );
+  const dayEnd = useMemo(
+    () => dayBase + (closeH * 60 + closeM) * 60 * 1000,
+    [dayBase, closeH, closeM]
+  );
 
   const timeRows = useMemo(() => {
     const rows: { label: string; t: number }[] = [];
     for (let t = dayStart; t < dayEnd; t += STEP_MIN * 60 * 1000) {
       rows.push({
-        label: new Date(t).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }),
+        label: new Date(t).toLocaleTimeString("it-IT", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         t,
       });
     }
@@ -103,7 +121,7 @@ export default function CalendarioAdmin() {
       setBookings(j.bookings ?? []);
       setBlocks(j.blocks ?? []);
     } catch (e: any) {
-      setMsg(e.message);
+      setMsg(e.message || "Errore caricamento");
     } finally {
       setLoading(false);
     }
@@ -114,7 +132,7 @@ export default function CalendarioAdmin() {
   }, [date]);
 
   const items = useMemo(() => {
-    const all: Array<
+    const out: Array<
       | {
           type: "BOOKING";
           id: string;
@@ -140,41 +158,35 @@ export default function CalendarioAdmin() {
     > = [];
 
     for (const b of bookings) {
-      const s = new Date(b.start_ts).getTime();
-      const e = new Date(b.end_ts).getTime();
       const paid = !!b.paid_at;
-
-      all.push({
+      out.push({
         type: "BOOKING",
         id: b.id,
         resource_id: b.resource_id,
-        start: s,
-        end: e,
+        start: new Date(b.start_ts).getTime(),
+        end: new Date(b.end_ts).getTime(),
         title: b.user_name || "Prenotazione",
-        subtitle: `${hhmm(b.start_ts)}–${hhmm(b.end_ts)} • ${b.user_phone ?? ""}`.trim(),
+        subtitle: `${hhmm(b.start_ts)}–${hhmm(b.end_ts)} • ${b.user_phone ?? ""}`,
         badge: paid ? "Pagata" : "Da pagare",
         booking: b,
       });
     }
 
     for (const bl of blocks) {
-      const s = new Date(bl.start_ts).getTime();
-      const e = new Date(bl.end_ts).getTime();
-
-      all.push({
+      out.push({
         type: "BLOCK",
         id: bl.id,
         resource_id: bl.resource_id,
-        start: s,
-        end: e,
+        start: new Date(bl.start_ts).getTime(),
+        end: new Date(bl.end_ts).getTime(),
         title: "Bloccato",
-        subtitle: `${hhmm(bl.start_ts)}–${hhmm(bl.end_ts)}${bl.reason ? ` • ${bl.reason}` : bl.note ? ` • ${bl.note}` : ""}`,
+        subtitle: `${hhmm(bl.start_ts)}–${hhmm(bl.end_ts)}${bl.reason ? ` • ${bl.reason}` : ""}`,
         badge: "Blocco",
         block: bl,
       });
     }
 
-    return all;
+    return out;
   }, [bookings, blocks]);
 
   const itemsByRes = useMemo(() => {
@@ -185,7 +197,9 @@ export default function CalendarioAdmin() {
       arr.push(it);
       map.set(it.resource_id, arr);
     }
-    for (const [k, arr] of map.entries()) arr.sort((a, b) => a.start - b.start);
+    for (const [k, arr] of map.entries()) {
+      arr.sort((a, b) => a.start - b.start);
+    }
     return map;
   }, [resources, items]);
 
@@ -199,19 +213,17 @@ export default function CalendarioAdmin() {
     return (diffMin / STEP_MIN) * rowH;
   }
 
-  // ----- NUOVA PRENOTAZIONE / BLOCCO -----
   const [newOpen, setNewOpen] = useState(false);
-  const [newResourceId, setNewResourceId] = useState<string>("");
-  const [newStartISO, setNewStartISO] = useState<string>("");
-  const [newMinutes, setNewMinutes] = useState<number>(60);
-  const [newName, setNewName] = useState<string>("");
-  const [newPhone, setNewPhone] = useState<string>("");
-  const [newErr, setNewErr] = useState<string>("");
+  const [newResourceId, setNewResourceId] = useState("");
+  const [newStartISO, setNewStartISO] = useState("");
+  const [newMinutes, setNewMinutes] = useState(60);
+  const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newErr, setNewErr] = useState("");
 
-  function openNewBooking(resourceId: string, startT: number) {
-    const startISO = new Date(startT).toISOString();
+  function openNewSlot(resourceId: string, startT: number) {
     setNewResourceId(resourceId);
-    setNewStartISO(startISO);
+    setNewStartISO(new Date(startT).toISOString());
     setNewMinutes(60);
     setNewName("");
     setNewPhone("");
@@ -222,13 +234,13 @@ export default function CalendarioAdmin() {
   async function submitNewBooking() {
     setNewErr("");
     try {
-      const endISO = new Date(new Date(newStartISO).getTime() + newMinutes * 60 * 1000).toISOString();
+      const endISO = new Date(
+        new Date(newStartISO).getTime() + newMinutes * 60 * 1000
+      ).toISOString();
 
       const r = await fetch("/api/admin/create-booking", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           resourceId: newResourceId,
           startISO: newStartISO,
@@ -246,23 +258,23 @@ export default function CalendarioAdmin() {
       setNewOpen(false);
       await load();
     } catch (e: any) {
-      setNewErr(e.message);
+      setNewErr(e.message || "Errore creazione prenotazione");
     }
   }
 
   async function createBlock() {
     setNewErr("");
     try {
-      const reason = prompt("Motivo blocco campo (es. Allenamento, Evento, Manutenzione)");
+      const reason = prompt("Motivo blocco campo (es. Allenamento, Manutenzione, Evento)");
       if (!reason) return;
 
-      const endISO = new Date(new Date(newStartISO).getTime() + newMinutes * 60 * 1000).toISOString();
+      const endISO = new Date(
+        new Date(newStartISO).getTime() + newMinutes * 60 * 1000
+      ).toISOString();
 
       const r = await fetch("/api/admin/create-block", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           resource_id: newResourceId,
           start_ts: newStartISO,
@@ -277,25 +289,26 @@ export default function CalendarioAdmin() {
       setNewOpen(false);
       await load();
     } catch (e: any) {
-      setNewErr(e.message);
+      setNewErr(e.message || "Errore creazione blocco");
     }
   }
 
-  // ----- DETTAGLIO PRENOTAZIONE -----
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
-
-  const [payAmount, setPayAmount] = useState<string>("");
+  const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<"CASH" | "CARD">("CASH");
-  const [paymentNote, setPaymentNote] = useState<string>("");
-  const [updateTotalAlso, setUpdateTotalAlso] = useState<boolean>(true);
-  const [detailErr, setDetailErr] = useState<string>("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [updateTotalAlso, setUpdateTotalAlso] = useState(true);
+  const [detailErr, setDetailErr] = useState("");
 
   function openDetail(b: Booking) {
     setDetailBooking(b);
-
     const baseCents = b.paid_amount_cents ?? b.total_amount_cents ?? null;
-    setPayAmount(baseCents != null ? String((baseCents / 100).toFixed(2)).replace(".", ",") : "");
+    setPayAmount(
+      baseCents != null
+        ? String((baseCents / 100).toFixed(2)).replace(".", ",")
+        : ""
+    );
     setPayMethod("CASH");
     setPaymentNote(b.payment_note ?? "");
     setUpdateTotalAlso(true);
@@ -307,9 +320,9 @@ export default function CalendarioAdmin() {
     if (!detailBooking) return;
 
     setDetailErr("");
-
     const normalized = (payAmount || "").replace(",", ".").trim();
     const num = Number(normalized);
+
     if (!isFinite(num) || num <= 0) {
       setDetailErr("Importo non valido");
       return;
@@ -320,9 +333,7 @@ export default function CalendarioAdmin() {
     try {
       const r = await fetch("/api/admin/mark-paid", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bookingId: detailBooking.id,
           paidAmountCents: cents,
@@ -338,7 +349,7 @@ export default function CalendarioAdmin() {
       setDetailOpen(false);
       await load();
     } catch (e: any) {
-      setDetailErr(e.message);
+      setDetailErr(e.message || "Errore pagamento");
     }
   }
 
@@ -350,9 +361,7 @@ export default function CalendarioAdmin() {
     try {
       const r = await fetch("/api/admin/cancel-booking", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bookingId: detailBooking.id,
           reason,
@@ -365,7 +374,7 @@ export default function CalendarioAdmin() {
       setDetailOpen(false);
       await load();
     } catch (e: any) {
-      setDetailErr(e.message);
+      setDetailErr(e.message || "Errore disdetta");
     }
   }
 
@@ -411,21 +420,6 @@ export default function CalendarioAdmin() {
             Aggiorna
           </button>
 
-          <a
-            href="/admin/abbonamenti"
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid #ddd",
-              background: "white",
-              color: "#111",
-              textDecoration: "none",
-              fontWeight: 900,
-            }}
-          >
-            Abbonamenti
-          </a>
-
           <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
             <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e9ecef", fontWeight: 800 }}>
               ✅ Prenotato
@@ -434,14 +428,14 @@ export default function CalendarioAdmin() {
               💶 Pagata
             </span>
             <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ffe8cc", fontWeight: 800 }}>
-              ⛔ Bloccato
+              ⛔ Blocco
             </span>
           </div>
         </div>
 
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 12 }}>
           Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:
-          {String(closeM).padStart(2, "0")} (step 30 min). • Click su slot vuoto = prenotazione o blocco campo.
+          {String(closeM).padStart(2, "0")} (step 30 min). • Click su slot vuoto = inserisci prenotazione manuale o blocco campo.
         </div>
 
         {msg && (
@@ -475,7 +469,12 @@ export default function CalendarioAdmin() {
             {resources.map((r) => (
               <div
                 key={r.id}
-                style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #eee", whiteSpace: "nowrap" }}
+                style={{
+                  padding: 10,
+                  fontWeight: 900,
+                  borderRight: "1px solid #eee",
+                  whiteSpace: "nowrap",
+                }}
               >
                 {r.name}
               </div>
@@ -485,7 +484,16 @@ export default function CalendarioAdmin() {
           <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth }}>
             <div style={{ borderRight: "1px solid #eee" }}>
               {timeRows.map((t, i) => (
-                <div key={i} style={{ height: rowH, padding: "12px 8px", fontSize: 12, fontWeight: 900, opacity: 0.7 }}>
+                <div
+                  key={i}
+                  style={{
+                    height: rowH,
+                    padding: "12px 8px",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    opacity: 0.7,
+                  }}
+                >
                   {t.label}
                 </div>
               ))}
@@ -494,11 +502,18 @@ export default function CalendarioAdmin() {
             <div style={{ position: "relative" }}>
               <div style={{ display: "grid", gridTemplateColumns: `repeat(${resources.length}, ${colW}px)` }}>
                 {resources.map((r) => (
-                  <div key={r.id} style={{ position: "relative", height: gridH, borderRight: "1px solid #f0f0f0" }}>
+                  <div
+                    key={r.id}
+                    style={{
+                      position: "relative",
+                      height: gridH,
+                      borderRight: "1px solid #f0f0f0",
+                    }}
+                  >
                     {timeRows.map((tr, idx) => (
                       <div
                         key={idx}
-                        onClick={() => openNewBooking(r.id, tr.t)}
+                        onClick={() => openNewSlot(r.id, tr.t)}
                         style={{
                           height: rowH,
                           borderBottom: "1px solid #f6f6f6",
@@ -529,7 +544,11 @@ export default function CalendarioAdmin() {
                             height: h,
                             borderRadius: 12,
                             background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
-                            border: isBlock ? "1px solid #f1c27d" : paid ? "1px solid #9ad19a" : "1px solid #d0d0d0",
+                            border: isBlock
+                              ? "1px solid #f1c27d"
+                              : paid
+                              ? "1px solid #9ad19a"
+                              : "1px solid #d0d0d0",
                             padding: 10,
                             boxSizing: "border-box",
                             overflow: "hidden",
@@ -548,6 +567,7 @@ export default function CalendarioAdmin() {
                             >
                               {it.title}
                             </div>
+
                             <div
                               style={{
                                 fontSize: 11,
@@ -563,7 +583,9 @@ export default function CalendarioAdmin() {
                             </div>
                           </div>
 
-                          <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, opacity: 0.85 }}>{it.subtitle}</div>
+                          <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, opacity: 0.85 }}>
+                            {it.subtitle}
+                          </div>
 
                           {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
                             <div style={{ marginTop: 6, fontSize: 12, fontWeight: 950 }}>
@@ -597,7 +619,6 @@ export default function CalendarioAdmin() {
           </div>
         </div>
 
-        {/* MODAL NUOVA PRENOTAZIONE / BLOCCO */}
         {newOpen && (
           <div
             onClick={() => setNewOpen(false)}
@@ -673,7 +694,16 @@ export default function CalendarioAdmin() {
                   </div>
                 )}
 
-                <div style={{ display: "flex", gap: 10, justifyContent: "space-between", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    marginTop: 6,
+                  }}
+                >
                   <button
                     onClick={createBlock}
                     style={{
@@ -688,7 +718,7 @@ export default function CalendarioAdmin() {
                     Blocca campo
                   </button>
 
-                  <div style={{ display: "flex", gap: 10 }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <button
                       onClick={() => setNewOpen(false)}
                       style={{
@@ -722,7 +752,6 @@ export default function CalendarioAdmin() {
           </div>
         )}
 
-        {/* MODAL DETTAGLIO PRENOTAZIONE */}
         {detailOpen && detailBooking && (
           <div
             onClick={() => setDetailOpen(false)}
@@ -749,6 +778,7 @@ export default function CalendarioAdmin() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 950 }}>Prenotazione</div>
+
               <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
                 <div><b>Nome:</b> {detailBooking.user_name}</div>
                 <div><b>Telefono:</b> {detailBooking.user_phone}</div>
@@ -776,7 +806,7 @@ export default function CalendarioAdmin() {
                     <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Metodo</div>
                     <select
                       value={payMethod}
-                      onChange={(e) => setPayMethod(e.target.value as any)}
+                      onChange={(e) => setPayMethod(e.target.value as "CASH" | "CARD")}
                       style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                     >
                       <option value="CASH">Contanti</option>
@@ -834,7 +864,7 @@ export default function CalendarioAdmin() {
                     Disdici prenotazione
                   </button>
 
-                  <div style={{ display: "flex", gap: 10, marginLeft: "auto", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <a
                       href={`/admin/ricevuta/${detailBooking.id}`}
                       target="_blank"
@@ -870,7 +900,7 @@ export default function CalendarioAdmin() {
                 </div>
 
                 <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-                  Tip: “Ricevuta” apre una pagina stampabile (poi fai Stampa → Salva PDF).
+                  Tip: “Ricevuta” apre la pagina stampabile. Poi fai Stampa → Salva PDF.
                 </div>
               </div>
             </div>
