@@ -19,17 +19,17 @@ export async function GET(req: Request) {
     );
 
     const start = date + "T00:00:00";
-const end = date + "T23:59:59";
+    const end = date + "T23:59:59";
 
-const { data: bookings, error } = await supabase
-  .from("bookings")
-  .select("*")
-  .gte("start_ts", start)
-  .lt("start_ts", end);
+    const { data: bookings, error } = await supabase
+      .from("bookings")
+      .select("*")
+      .gte("start_ts", start)
+      .lt("start_ts", end);
 
-if (error) {
-  throw error;
-}
+    if (error) {
+      throw error;
+    }
 
     const slots: Array<{ time: string; booking: any | null }> = [];
 
@@ -43,7 +43,7 @@ if (error) {
 
       const booking =
         bookings?.find((b: any) =>
-          String(b.start_ts).includes(${date}T${time})
+          String(b.start_ts).includes(date + "T" + time)
         ) || null;
 
       slots.push({
@@ -60,9 +60,10 @@ if (error) {
     }
 
     return NextResponse.json({ slots });
+
   } catch (err: any) {
     return NextResponse.json(
-      { error: err?.message || "server error" },
+      { error: err.message || "server error" },
       { status: 500 }
     );
   }
