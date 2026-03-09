@@ -1,48 +1,63 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const date = url.searchParams.get("date"); // YYYY-MM-DD
+  try {
+    const { searchParams } = new URL(req.url);
+    const date = searchParams.get("date");
 
-  if (!date) return NextResponse.json({ error: "Missing date" }, { status: 400 });
+    if (!date) {
+      return NextResponse.json({ error: "missing date" }, { status: 400 });
+    }
 
-  const start = new Date(`${date}T00:00:00.000Z`);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+    const { data: bookings, error } = await supabase
+      .from("bookings")
+      .select("*")
+      .eq("date", date);
 
-  const startISO = start.toISOString();
-  const endISO = end.toISOString();
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
-  const { data: resources, error: rErr } = await supabase
-    .from("resources")
-    .select("id,name,is_public,is_active")
-    .eq("is_active", true)
-    .order("name");
+    const startHour = 5;
+    const endHour = 23;
+    const step = 30;
 
-  if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 });
+    const slots: any[] = [];
 
-  const { data: bookings, error: bErr } = await supabase
-    .from("bookings")
-    .select("id,resource_id,user_name,user_phone,start_ts,end_ts,status,pay_mode,total_amount_cents,paid_amount_cents,paid_method,paid_at")
-    .in("status", ["PENDING_PAYMENT", "CONFIRMED"])
-    .lt("start_ts", endISO)
-    .gt("end_ts", startISO);
+    for (let h = startHour; h <= endHour; h++) {
+      for (let m = 0; m < 60; m += step) {
 
-  if (bErr) return NextResponse.json({ error: bErr.message }, { status: 500 });
+        const hour = String(h).padStart(2, "0");
+        const min = String(m).padStart(2, "0");
+        const time = hour + ":" + min;
 
-  const { data: blocks, error: blErr } = await supabase
-    .from("admin_blocks")
-    .select("id,resource_id,start_ts,end_ts,note")
-    .lt("start_ts", endISO)
-    .gt("end_ts", startISO);
+        slots.push({
+          time,
+          date,
+          booking: bookings?.find((b: any) => b.time === time) || null,
+        });
 
-  if (blErr) return NextResponse.json({ error: blErr.message }, { status: 500 });
+      }
+    }
 
-  return NextResponse.json({
-    date,
-    resources: resources ?? [],
-    bookings: bookings ?? [],
-    blocks: blocks ?? [],
-  });
+    return NextResponse.json({
+      slots
+    });
+
+  } catch (err: any) {
+
+    return NextResponse.json(
+      {
+        error: err?.message || "server error"
+      },
+      { status: 500 }
+    );
+
+  }
 }
