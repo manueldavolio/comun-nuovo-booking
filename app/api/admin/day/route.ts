@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export async function GET(req: Request) {
-
   try {
-
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date");
 
@@ -20,34 +18,37 @@ export async function GET(req: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
+    const dayStart = date + "T00:00:00";
+    const dayEnd = date + "T23:59:59";
+
     const { data: bookings, error } = await supabase
       .from("bookings")
       .select("*")
-      .gte("start_ts", ${date}T00:00:00)
-      .lt("start_ts", ${date}T23:59:59);
+      .gte("start_ts", dayStart)
+      .lt("start_ts", dayEnd);
 
     if (error) {
       throw error;
     }
 
-    const slots: any[] = [];
+    const slots: Array<{ time: string; booking: any | null }> = [];
 
     let hour = 15;
     let minute = 30;
 
     while (hour < 23) {
-
-      const time =
-        ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")};
+      const hh = String(hour).padStart(2, "0");
+      const mm = String(minute).padStart(2, "0");
+      const time = hh + ":" + mm;
 
       const booking =
         bookings?.find((b: any) =>
-          String(b.start_ts).includes(${date}T${time})
+          String(b.start_ts).includes(date + "T" + time)
         ) || null;
 
       slots.push({
         time,
-        booking
+        booking,
       });
 
       minute += 30;
@@ -56,22 +57,13 @@ export async function GET(req: Request) {
         minute = 0;
         hour++;
       }
-
     }
 
-    return NextResponse.json({
-      slots
-    });
-
+    return NextResponse.json({ slots });
   } catch (err: any) {
-
     return NextResponse.json(
-      {
-        error: err?.message || "server error"
-      },
+      { error: err?.message || "server error" },
       { status: 500 }
     );
-
   }
-
 }
