@@ -18,15 +18,18 @@ export async function GET(req: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    const { data: bookings, error } = await supabase
+    const start = date + "T00:00:00";
+const end = date + "T23:59:59";
+
+const { data: bookings, error } = await supabase
   .from("bookings")
   .select("*")
-  .gte("start_ts", `${date}T00:00:00)
-  .lt("start_ts", `${date}T23:59:59);
+  .gte("start_ts", start)
+  .lt("start_ts", end);
 
-    if (error) {
-      throw error;
-    }
+if (error) {
+  throw error;
+}
 
     const slots: Array<{ time: string; booking: any | null }> = [];
 
@@ -36,7 +39,7 @@ export async function GET(req: Request) {
     while (hour < 23) {
       const hh = String(hour).padStart(2, "0");
       const mm = String(minute).padStart(2, "0");
-      const time = ${hh}:${mm};
+      const time = hh + ":" + mm;
 
       const booking =
         bookings?.find((b: any) =>
