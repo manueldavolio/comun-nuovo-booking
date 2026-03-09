@@ -1,41 +1,13 @@
 import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
 
-export async function GET(req: Request) {
+export async function GET() {
+  const { data, error } = await supabase
+    .from("resources")
+    .select("id,name,is_public,is_active")
+    .eq("is_active", true)
+    .order("name");
 
-  const { searchParams } = new URL(req.url);
-  const date = searchParams.get("date");
-
-  if (!date) {
-    return NextResponse.json({ error: "missing date" }, { status: 400 });
-  }
-
-  const startHour = 5;
-  const endHour = 23;
-  const step = 30;
-
-  const slots: any[] = [];
-
-  for (let h = startHour; h <= endHour; h++) {
-
-    for (let m = 0; m < 60; m += step) {
-
-      const hour = String(h).padStart(2, "0");
-      const minute = String(m).padStart(2, "0");
-
-      const time = hour + ":" + minute;
-
-      slots.push({
-        time,
-        date,
-        booking: null
-      });
-
-    }
-
-  }
-
-  return NextResponse.json({
-    slots
-  });
-
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ resources: data ?? [] });
 }
