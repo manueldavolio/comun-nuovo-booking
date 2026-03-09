@@ -2,12 +2,17 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export async function GET(req: Request) {
+
   try {
+
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date");
 
     if (!date) {
-      return NextResponse.json({ error: "Missing date" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing date" },
+        { status: 400 }
+      );
     }
 
     const supabase = createClient(
@@ -25,13 +30,15 @@ export async function GET(req: Request) {
       throw error;
     }
 
-    const slots: Array<{ time: string; booking: any | null }> = [];
+    const slots: any[] = [];
 
     let hour = 15;
     let minute = 30;
 
     while (hour < 23) {
-      const time = ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")};
+
+      const time =
+        ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")};
 
       const booking =
         bookings?.find((b: any) =>
@@ -40,7 +47,7 @@ export async function GET(req: Request) {
 
       slots.push({
         time,
-        booking,
+        booking
       });
 
       minute += 30;
@@ -49,13 +56,22 @@ export async function GET(req: Request) {
         minute = 0;
         hour++;
       }
+
     }
 
-    return NextResponse.json({ slots });
+    return NextResponse.json({
+      slots
+    });
+
   } catch (err: any) {
+
     return NextResponse.json(
-      { error: err?.message || "server error" },
+      {
+        error: err?.message || "server error"
+      },
       { status: 500 }
     );
+
   }
+
 }
