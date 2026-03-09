@@ -18,14 +18,11 @@ export async function GET(req: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    const dayStart = date + "T00:00:00";
-    const dayEnd = date + "T23:59:59";
-
     const { data: bookings, error } = await supabase
       .from("bookings")
       .select("*")
-      .gte("start_ts", dayStart)
-      .lt("start_ts", dayEnd);
+      .gte("start_ts", ${date}T00:00:00)
+      .lt("start_ts", ${date}T23:59:59);
 
     if (error) {
       throw error;
@@ -39,11 +36,11 @@ export async function GET(req: Request) {
     while (hour < 23) {
       const hh = String(hour).padStart(2, "0");
       const mm = String(minute).padStart(2, "0");
-      const time = hh + ":" + mm;
+      const time = ${hh}:${mm};
 
       const booking =
         bookings?.find((b: any) =>
-          String(b.start_ts).includes(date + "T" + time)
+          String(b.start_ts).includes(${date}T${time})
         ) || null;
 
       slots.push({
