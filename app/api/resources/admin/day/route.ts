@@ -15,16 +15,13 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "missing date" }, { status: 400 });
     }
 
-    const { data: bookings, error: bookingsError } = await supabase
+    const { data: bookings, error } = await supabase
       .from("bookings")
       .select("*")
       .eq("date", date);
 
-    if (bookingsError) {
-      return NextResponse.json(
-        { error: bookingsError.message },
-        { status: 500 }
-      );
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     const startHour = 5;
@@ -35,21 +32,32 @@ export async function GET(req: Request) {
 
     for (let h = startHour; h <= endHour; h++) {
       for (let m = 0; m < 60; m += step) {
-        const time = ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")};
+
+        const hour = String(h).padStart(2, "0");
+        const min = String(m).padStart(2, "0");
+        const time = hour + ":" + min;
 
         slots.push({
           time,
           date,
           booking: bookings?.find((b: any) => b.time === time) || null,
         });
+
       }
     }
 
-    return NextResponse.json({ slots });
-  } catch (error: any) {
+    return NextResponse.json({
+      slots
+    });
+
+  } catch (err: any) {
+
     return NextResponse.json(
-      { error: error?.message || "server error" },
+      {
+        error: err?.message || "server error"
+      },
       { status: 500 }
     );
+
   }
 }
