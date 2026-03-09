@@ -392,7 +392,7 @@ export default function CalendarioAdmin() {
         <img src="/logo.png" style={{ height: 80, marginBottom: 20 }} />
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: 26, fontWeight: 900, marginRight: 12 }}>Calendario</h1>
+          <h1 style={{ fontSize: 26, fontWeight: 900, marginRight: 12 }}>Calendario TEST BLOCCO</h1>
 
           <label>
             <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Data</div>
