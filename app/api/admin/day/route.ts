@@ -25,15 +25,16 @@ export async function GET(req: Request) {
       throw error;
     }
 
-    const slots = [];
+    const slots: any[] = [];
+
     let hour = 15;
     let minute = 30;
 
     while (hour < 23) {
       const time = ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")};
 
-      const booking = bookings?.find((b) =>
-        b.start_ts.includes(${date}T${time})
+      const booking = bookings?.find((b: any) =>
+        String(b.start_ts).includes(${date}T${time})
       );
 
       slots.push({
@@ -42,6 +43,7 @@ export async function GET(req: Request) {
       });
 
       minute += 30;
+
       if (minute === 60) {
         minute = 0;
         hour++;
