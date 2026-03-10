@@ -565,87 +565,120 @@ export default function CalendarioAdmin() {
                       const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
 
                       return (
-                        <div
-                          key={it.id}
-                          onClick={() => {
-                            if (it.type === "BOOKING") {
-                              openDetail(it.booking);
-                            }
-                            if (it.type === "BLOCK") {
-                              openBlockDetail(it.block);
-                            }
-                          }}
-                          title={`${it.title}\n${it.subtitle}`}
-                          style={{
-                            position: "absolute",
-                            left: 10,
-                            right: 10,
-                            top: top,
-                            height: h,
-                            borderRadius: 12,
-                            background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
-                            border: isBlock
-                              ? "1px solid #f1c27d"
-                              : paid
-                              ? "1px solid #9ad19a"
-                              : "1px solid #d0d0d0",
-                            padding: 10,
-                            boxSizing: "border-box",
-                            overflow: "hidden",
-                            cursor: "pointer",
-                            zIndex: 20,
-                            pointerEvents: "auto",
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                            <div
-                              style={{
-                                fontWeight: 950,
-                                fontSize: 13,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {it.title}
-                            </div>
+  <div
+    key={it.id}
+    onMouseDown={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }}
+    onClick={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 950,
-                                padding: "4px 8px",
-                                borderRadius: 999,
-                                background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
-                                border: "1px solid rgba(0,0,0,0.08)",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {it.badge}
-                            </div>
-                          </div>
+      if (it.type === "BOOKING") {
+        openDetail(it.booking);
+      }
 
-                          <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, opacity: 0.85 }}>
-                            {it.subtitle}
-                          </div>
+      if (it.type === "BLOCK") {
+        openBlockDetail(it.block);
+      }
+    }}
+    title={`${it.title}\n${it.subtitle}`}
+    style={{
+      position: "absolute",
+      left: 10,
+      right: 10,
+      top: top,
+      height: h,
+      borderRadius: 12,
+      background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
+      border: isBlock
+        ? "1px solid #f1c27d"
+        : paid
+        ? "1px solid #9ad19a"
+        : "1px solid #d0d0d0",
+      padding: 10,
+      boxSizing: "border-box",
+      overflow: "hidden",
+      cursor: "pointer",
+      zIndex: 20,
+      pointerEvents: "auto",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 10,
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        style={{
+          fontWeight: 950,
+          fontSize: 13,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+        }}
+      >
+        {it.title}
+      </div>
 
-                          {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
-                            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 950 }}>
-                              Totale: {eurFromCents(it.booking.total_amount_cents)}
-                              {it.booking?.paid_at ? (
-                                <>
-                                  {" "}• Incassato:{" "}
-                                  {eurFromCents(
-                                    it.booking.paid_amount_cents ??
-                                      it.booking.total_amount_cents ??
-                                      null
-                                  )}
-                                </>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
-                      );
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 950,
+          padding: "4px 8px",
+          borderRadius: 999,
+          background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
+          border: "1px solid rgba(0,0,0,0.08)",
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+        }}
+      >
+        {it.badge}
+      </div>
+    </div>
+
+    <div
+      style={{
+        marginTop: 6,
+        fontSize: 12,
+        fontWeight: 800,
+        opacity: 0.85,
+        pointerEvents: "none",
+      }}
+    >
+      {it.subtitle}
+    </div>
+
+    {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 12,
+          fontWeight: 950,
+          pointerEvents: "none",
+        }}
+      >
+        Totale: {eurFromCents(it.booking.total_amount_cents)}
+        {it.booking?.paid_at ? (
+          <>
+            {" "}• Incassato:{" "}
+            {eurFromCents(
+              it.booking.paid_amount_cents ??
+                it.booking.total_amount_cents ??
+                null
+            )}
+          </>
+        ) : null}
+      </div>
+    )}
+  </div>
+);
+
                     })}
                   </div>
                 ))}
