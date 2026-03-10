@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
     if (!resource_id || !start_ts || !end_ts) {
       return NextResponse.json(
-        { error: "Dati mancanti" },
+        { error: "Dati mancanti per il blocco" },
         { status: 400 }
       );
     }
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
           resource_id,
           start_ts,
           end_ts,
-          reason,
+          note: reason,
         },
       ])
       .select()
