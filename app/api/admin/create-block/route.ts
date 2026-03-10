@@ -1,23 +1,55 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req: Request) {
-  const body = await req.json();
+  try {
+    const body = await req.json();
 
-  const { resource_id, start_ts, end_ts, reason } = body;
+    const resource_id = body?.resource_id;
+    const start_ts = body?.start_ts;
+    const end_ts = body?.end_ts;
+    const reason = body?.reason ?? null;
 
-  const { error } = await supabase
-    .from("blocks")
-    .insert({
-      resource_id,
-      start_ts,
-      end_ts,
-      reason
+    if (!resource_id || !start_ts || !end_ts) {
+      return NextResponse.json(
+        { error: "Dati mancanti" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { data, error } = await supabase
+      .from("admin_blocks")
+      .insert([
+        {
+          resource_id,
+          start_ts,
+          end_ts,
+          reason,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message || "Errore creazione blocco" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      block: data,
     });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "server error" },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ ok: true });
 }
