@@ -385,10 +385,11 @@ export default function CalendarioAdmin() {
   const [blockErr, setBlockErr] = useState("");
 
   function openBlockDetail(bl: Block) {
-    setDetailBlock(bl);
-    setBlockErr("");
-    setBlockDetailOpen(true);
-  }
+  alert("click blocco ok");
+  setDetailBlock(bl);
+  setBlockErr("");
+  setBlockDetailOpen(true);
+}
 
   async function deleteBlock() {
     if (!detailBlock) return;
