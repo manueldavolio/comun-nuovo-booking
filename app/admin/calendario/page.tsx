@@ -30,7 +30,7 @@ type Block = {
   resource_id: string;
   start_ts: string;
   end_ts: string;
-  reason?: string | null;
+  note?: string | null;
 };
 
 function todayISODate() {
@@ -180,7 +180,7 @@ export default function CalendarioAdmin() {
         start: new Date(bl.start_ts).getTime(),
         end: new Date(bl.end_ts).getTime(),
         title: "Bloccato",
-        subtitle: `${hhmm(bl.start_ts)}–${hhmm(bl.end_ts)}${bl.reason ? ` • ${bl.reason}` : ""}`,
+        subtitle: `${hhmm(bl.start_ts)}–${hhmm(bl.end_ts)}${bl.note ? ` • ${bl.note}` : ""}`,
         badge: "Blocco",
         block: bl,
       });
