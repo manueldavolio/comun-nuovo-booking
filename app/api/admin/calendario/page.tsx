@@ -606,53 +606,100 @@ export default function CalendarioAdmin() {
     }}
   >
     <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 10,
-        pointerEvents: "none",
-      }}
-    >
-      <div
-        style={{
-          fontWeight: 950,
-          fontSize: 13,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          pointerEvents: "none",
-        }}
-      >
-        {it.title}
-      </div>
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+  }}
+>
+  <div
+    style={{
+      fontWeight: 950,
+      fontSize: 13,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+    }}
+  >
+    {it.title}
+  </div>
 
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 950,
-          padding: "4px 8px",
-          borderRadius: 999,
-          background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
-          border: "1px solid rgba(0,0,0,0.08)",
-          whiteSpace: "nowrap",
-          pointerEvents: "none",
-        }}
-      >
-        {it.badge}
-      </div>
-    </div>
-
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+    }}
+  >
     <div
       style={{
-        marginTop: 6,
-        fontSize: 12,
-        fontWeight: 800,
-        opacity: 0.85,
-        pointerEvents: "none",
+        fontSize: 11,
+        fontWeight: 950,
+        padding: "4px 8px",
+        borderRadius: 999,
+        background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
+        border: "1px solid rgba(0,0,0,0.08)",
+        whiteSpace: "nowrap",
       }}
     >
-      {it.subtitle}
+      {it.badge}
     </div>
+
+    {it.type === "BOOKING" ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          openDetail(it.booking);
+        }}
+        style={{
+          fontSize: 11,
+          fontWeight: 900,
+          padding: "4px 8px",
+          borderRadius: 8,
+          border: "1px solid #ccc",
+          background: "white",
+          cursor: "pointer",
+        }}
+      >
+        Apri
+      </button>
+    ) : null}
+
+    {it.type === "BLOCK" ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          openBlockDetail(it.block);
+        }}
+        style={{
+          fontSize: 11,
+          fontWeight: 900,
+          padding: "4px 8px",
+          borderRadius: 8,
+          border: "1px solid #e6b35c",
+          background: "white",
+          cursor: "pointer",
+        }}
+      >
+        Apri
+      </button>
+    ) : null}
+  </div>
+</div>
+
+<div
+  style={{
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: 800,
+    opacity: 0.85,
+  }}
+>
+  {it.subtitle}
+</div>
+
 
     {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
       <div
