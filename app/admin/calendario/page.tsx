@@ -55,7 +55,7 @@ function eurFromCents(cents?: number | null) {
 
 function getSchedule(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00.000Z`);
-  const day = d.getUTCDay(); // 0 domenica, 6 sabato
+  const day = d.getUTCDay();
   const isWeekend = day === 0 || day === 6;
   if (isWeekend) return { openH: 8, openM: 0, closeH: 23, closeM: 0 };
   return { openH: 15, openM: 30, closeH: 23, closeM: 0 };
@@ -265,7 +265,9 @@ export default function CalendarioAdmin() {
   async function createBlock() {
     setNewErr("");
     try {
-      const reason = prompt("Motivo blocco campo (es. Allenamento, Manutenzione, Evento)");
+      const reason = prompt(
+        "Motivo blocco campo (es. Allenamento, Manutenzione, Evento)"
+      );
       if (!reason) return;
 
       const endISO = new Date(
@@ -339,7 +341,7 @@ export default function CalendarioAdmin() {
           paidAmountCents: cents,
           paidMethod: payMethod,
           paymentNote,
-          updateTotalAlso,
+          updateTotalAlso: updateTotalAlso,
         }),
       });
 
@@ -364,7 +366,7 @@ export default function CalendarioAdmin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bookingId: detailBooking.id,
-          reason,
+          reason: reason,
         }),
       });
 
@@ -375,6 +377,38 @@ export default function CalendarioAdmin() {
       await load();
     } catch (e: any) {
       setDetailErr(e.message || "Errore disdetta");
+    }
+  }
+
+  const [blockDetailOpen, setBlockDetailOpen] = useState(false);
+  const [detailBlock, setDetailBlock] = useState<Block | null>(null);
+  const [blockErr, setBlockErr] = useState("");
+
+  function openBlockDetail(bl: Block) {
+    setDetailBlock(bl);
+    setBlockErr("");
+    setBlockDetailOpen(true);
+  }
+
+  async function deleteBlock() {
+    if (!detailBlock) return;
+
+    try {
+      const r = await fetch("/api/admin/delete-block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          blockId: detailBlock.id,
+        }),
+      });
+
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Errore eliminazione blocco");
+
+      setBlockDetailOpen(false);
+      await load();
+    } catch (e: any) {
+      setBlockErr(e.message || "Errore eliminazione blocco");
     }
   }
 
@@ -434,8 +468,7 @@ export default function CalendarioAdmin() {
         </div>
 
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 12 }}>
-          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:
-          {String(closeM).padStart(2, "0")} (step 30 min). • Click su slot vuoto = inserisci prenotazione manuale o blocco campo.
+          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Click su slot vuoto = inserisci prenotazione manuale o blocco campo.
         </div>
 
         {msg && (
@@ -462,7 +495,7 @@ export default function CalendarioAdmin() {
               zIndex: 5,
               background: "#fafafa",
               borderBottom: "1px solid #eee",
-              minWidth,
+              minWidth: minWidth,
             }}
           >
             <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #eee" }} />
@@ -481,7 +514,7 @@ export default function CalendarioAdmin() {
             ))}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth }}>
+          <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
             <div style={{ borderRight: "1px solid #eee" }}>
               {timeRows.map((t, i) => (
                 <div
@@ -518,6 +551,8 @@ export default function CalendarioAdmin() {
                           height: rowH,
                           borderBottom: "1px solid #f6f6f6",
                           cursor: "pointer",
+                          position: "relative",
+                          zIndex: 1,
                         }}
                         title="Clicca per inserire prenotazione o bloccare il campo"
                       />
@@ -530,73 +565,167 @@ export default function CalendarioAdmin() {
                       const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
 
                       return (
-                        <div
-                          key={it.id}
-                          onClick={() => {
-                            if (it.type === "BOOKING") openDetail(it.booking);
-                          }}
-                          title={`${it.title}\n${it.subtitle}`}
-                          style={{
-                            position: "absolute",
-                            left: 10,
-                            right: 10,
-                            top,
-                            height: h,
-                            borderRadius: 12,
-                            background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
-                            border: isBlock
-                              ? "1px solid #f1c27d"
-                              : paid
-                              ? "1px solid #9ad19a"
-                              : "1px solid #d0d0d0",
-                            padding: 10,
-                            boxSizing: "border-box",
-                            overflow: "hidden",
-                            cursor: it.type === "BOOKING" ? "pointer" : "default",
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                            <div
-                              style={{
-                                fontWeight: 950,
-                                fontSize: 13,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {it.title}
-                            </div>
+  <div
+    key={it.id}
+    onMouseDown={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }}
+    onClick={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 950,
-                                padding: "4px 8px",
-                                borderRadius: 999,
-                                background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
-                                border: "1px solid rgba(0,0,0,0.08)",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {it.badge}
-                            </div>
-                          </div>
+      if (it.type === "BOOKING") {
+        openDetail(it.booking);
+      }
 
-                          <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, opacity: 0.85 }}>
-                            {it.subtitle}
-                          </div>
+      if (it.type === "BLOCK") {
+        openBlockDetail(it.block);
+      }
+    }}
+    title={`${it.title}\n${it.subtitle}`}
+    style={{
+      position: "absolute",
+      left: 10,
+      right: 10,
+      top: top,
+      height: h,
+      borderRadius: 12,
+      background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
+      border: isBlock
+        ? "1px solid #f1c27d"
+        : paid
+        ? "1px solid #9ad19a"
+        : "1px solid #d0d0d0",
+      padding: 10,
+      boxSizing: "border-box",
+      overflow: "hidden",
+      cursor: "pointer",
+      zIndex: 20,
+      pointerEvents: "auto",
+    }}
+  >
+    <div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+  }}
+>
+  <div
+    style={{
+      fontWeight: 950,
+      fontSize: 13,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+    }}
+  >
+    {it.title}
+  </div>
 
-                          {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
-                            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 950 }}>
-                              Totale: {eurFromCents(it.booking.total_amount_cents)}
-                              {it.booking?.paid_at ? (
-                                <> • Incassato: {eurFromCents(it.booking.paid_amount_cents ?? it.booking.total_amount_cents ?? null)}</>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
-                      );
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+    }}
+  >
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 950,
+        padding: "4px 8px",
+        borderRadius: 999,
+        background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
+        border: "1px solid rgba(0,0,0,0.08)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {it.badge}
+    </div>
+
+    {it.type === "BOOKING" ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          openDetail(it.booking);
+        }}
+        style={{
+          fontSize: 11,
+          fontWeight: 900,
+          padding: "4px 8px",
+          borderRadius: 8,
+          border: "1px solid #ccc",
+          background: "white",
+          cursor: "pointer",
+        }}
+      >
+        Apri
+      </button>
+    ) : null}
+
+    {it.type === "BLOCK" ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          openBlockDetail(it.block);
+        }}
+        style={{
+          fontSize: 11,
+          fontWeight: 900,
+          padding: "4px 8px",
+          borderRadius: 8,
+          border: "1px solid #e6b35c",
+          background: "white",
+          cursor: "pointer",
+        }}
+      >
+        Apri
+      </button>
+    ) : null}
+  </div>
+</div>
+
+<div
+  style={{
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: 800,
+    opacity: 0.85,
+  }}
+>
+  {it.subtitle}
+</div>
+
+
+    {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 12,
+          fontWeight: 950,
+          pointerEvents: "none",
+        }}
+      >
+        Totale: {eurFromCents(it.booking.total_amount_cents)}
+        {it.booking?.paid_at ? (
+          <>
+            {" "}• Incassato:{" "}
+            {eurFromCents(
+              it.booking.paid_amount_cents ??
+                it.booking.total_amount_cents ??
+                null
+            )}
+          </>
+        ) : null}
+      </div>
+    )}
+  </div>
+);
+
                     })}
                   </div>
                 ))}
@@ -902,6 +1031,83 @@ export default function CalendarioAdmin() {
                 <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
                   Tip: “Ricevuta” apre la pagina stampabile. Poi fai Stampa → Salva PDF.
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {blockDetailOpen && detailBlock && (
+          <div
+            onClick={() => setBlockDetailOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
+              zIndex: 60,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 500,
+                maxWidth: "100%",
+                background: "white",
+                borderRadius: 16,
+                border: "1px solid #eee",
+                padding: 16,
+              }}
+            >
+              <div style={{ fontSize: 18, fontWeight: 950 }}>Blocco campo</div>
+
+              <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 13 }}>
+                <div><b>Orario:</b> {hhmm(detailBlock.start_ts)}–{hhmm(detailBlock.end_ts)}</div>
+                <div><b>Motivo:</b> {detailBlock.note || "-"}</div>
+              </div>
+
+              {blockErr && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 12,
+                    background: "#fff3f3",
+                    border: "1px solid #ffd2d2",
+                  }}
+                >
+                  {blockErr}
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
+                <button
+                  onClick={() => setBlockDetailOpen(false)}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    background: "white",
+                    fontWeight: 900,
+                  }}
+                >
+                  Chiudi
+                </button>
+
+                <button
+                  onClick={deleteBlock}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid #ffb3b3",
+                    background: "#fff5f5",
+                    fontWeight: 950,
+                  }}
+                >
+                  Elimina blocco
+                </button>
               </div>
             </div>
           </div>
