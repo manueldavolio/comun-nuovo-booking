@@ -341,7 +341,7 @@ export default function CalendarioAdmin() {
           paidAmountCents: cents,
           paidMethod: payMethod,
           paymentNote,
-          updateTotalAlso,
+          updateTotalAlso: updateTotalAlso,
         }),
       });
 
@@ -366,7 +366,7 @@ export default function CalendarioAdmin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bookingId: detailBooking.id,
-          reason,
+          reason: reason,
         }),
       });
 
@@ -385,11 +385,10 @@ export default function CalendarioAdmin() {
   const [blockErr, setBlockErr] = useState("");
 
   function openBlockDetail(bl: Block) {
-  alert("click blocco ok");
-  setDetailBlock(bl);
-  setBlockErr("");
-  setBlockDetailOpen(true);
-}
+    setDetailBlock(bl);
+    setBlockErr("");
+    setBlockDetailOpen(true);
+  }
 
   async function deleteBlock() {
     if (!detailBlock) return;
@@ -426,37 +425,16 @@ export default function CalendarioAdmin() {
       <div style={{ maxWidth: 1700, margin: "0 auto" }}>
         <img src="/logo.png" style={{ height: 80, marginBottom: 20 }} />
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <h1
-            style={{
-              fontSize: 26,
-              fontWeight: 900,
-              marginRight: 12,
-            }}
-          >
-            Calendario
-          </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <h1 style={{ fontSize: 26, fontWeight: 900, marginRight: 12 }}>Calendario</h1>
 
           <label>
-            <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>
-              Data
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Data</div>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              style={{
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid #ddd",
-              }}
+              style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
             />
           </label>
 
@@ -476,52 +454,21 @@ export default function CalendarioAdmin() {
             Aggiorna
           </button>
 
-          <div
-            style={{
-              marginLeft: "auto",
-              display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <span
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "#e9ecef",
-                fontWeight: 800,
-              }}
-            >
+          <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e9ecef", fontWeight: 800 }}>
               ✅ Prenotato
             </span>
-            <span
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "#d9f5d9",
-                fontWeight: 800,
-              }}
-            >
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#d9f5d9", fontWeight: 800 }}>
               💶 Pagata
             </span>
-            <span
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "#ffe8cc",
-                fontWeight: 800,
-              }}
-            >
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ffe8cc", fontWeight: 800 }}>
               ⛔ Blocco
             </span>
           </div>
         </div>
 
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 12 }}>
-          Orari: {String(openH).padStart(2, "0")}:
-          {String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:
-          {String(closeM).padStart(2, "0")} (step 30 min). • Click su slot
-          vuoto = inserisci prenotazione manuale o blocco campo.
+          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Click su slot vuoto = inserisci prenotazione manuale o blocco campo.
         </div>
 
         {msg && (
@@ -538,14 +485,7 @@ export default function CalendarioAdmin() {
           </div>
         )}
 
-        <div
-          style={{
-            marginTop: 14,
-            border: "1px solid #eee",
-            borderRadius: 14,
-            overflow: "auto",
-          }}
-        >
+        <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 14, overflow: "auto" }}>
           <div
             style={{
               display: "grid",
@@ -555,16 +495,10 @@ export default function CalendarioAdmin() {
               zIndex: 5,
               background: "#fafafa",
               borderBottom: "1px solid #eee",
-              minWidth,
+              minWidth: minWidth,
             }}
           >
-            <div
-              style={{
-                padding: 10,
-                fontWeight: 900,
-                borderRight: "1px solid #eee",
-              }}
-            />
+            <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #eee" }} />
             {resources.map((r) => (
               <div
                 key={r.id}
@@ -580,13 +514,7 @@ export default function CalendarioAdmin() {
             ))}
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: `${timeColW}px 1fr`,
-              minWidth,
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
             <div style={{ borderRight: "1px solid #eee" }}>
               {timeRows.map((t, i) => (
                 <div
@@ -605,12 +533,7 @@ export default function CalendarioAdmin() {
             </div>
 
             <div style={{ position: "relative" }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${resources.length}, ${colW}px)`,
-                }}
-              >
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(${resources.length}, ${colW}px)` }}>
                 {resources.map((r) => (
                   <div
                     key={r.id}
@@ -628,6 +551,8 @@ export default function CalendarioAdmin() {
                           height: rowH,
                           borderBottom: "1px solid #f6f6f6",
                           cursor: "pointer",
+                          position: "relative",
+                          zIndex: 1,
                         }}
                         title="Clicca per inserire prenotazione o bloccare il campo"
                       />
@@ -643,15 +568,19 @@ export default function CalendarioAdmin() {
                         <div
                           key={it.id}
                           onClick={() => {
-                            if (it.type === "BOOKING") openDetail(it.booking);
-                            if (it.type === "BLOCK") openBlockDetail(it.block);
+                            if (it.type === "BOOKING") {
+                              openDetail(it.booking);
+                            }
+                            if (it.type === "BLOCK") {
+                              openBlockDetail(it.block);
+                            }
                           }}
                           title={`${it.title}\n${it.subtitle}`}
                           style={{
                             position: "absolute",
                             left: 10,
                             right: 10,
-                            top,
+                            top: top,
                             height: h,
                             borderRadius: 12,
                             background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
@@ -664,15 +593,11 @@ export default function CalendarioAdmin() {
                             boxSizing: "border-box",
                             overflow: "hidden",
                             cursor: "pointer",
+                            zIndex: 20,
+                            pointerEvents: "auto",
                           }}
                         >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: 10,
-                            }}
-                          >
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                             <div
                               style={{
                                 fontWeight: 950,
@@ -700,40 +625,25 @@ export default function CalendarioAdmin() {
                             </div>
                           </div>
 
-                          <div
-                            style={{
-                              marginTop: 6,
-                              fontSize: 12,
-                              fontWeight: 800,
-                              opacity: 0.85,
-                            }}
-                          >
+                          <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, opacity: 0.85 }}>
                             {it.subtitle}
                           </div>
 
-                          {it.type === "BOOKING" &&
-                            it.booking?.total_amount_cents != null && (
-                              <div
-                                style={{
-                                  marginTop: 6,
-                                  fontSize: 12,
-                                  fontWeight: 950,
-                                }}
-                              >
-                                Totale: {eurFromCents(it.booking.total_amount_cents)}
-                                {it.booking?.paid_at ? (
-                                  <>
-                                    {" "}
-                                    • Incassato:{" "}
-                                    {eurFromCents(
-                                      it.booking.paid_amount_cents ??
-                                        it.booking.total_amount_cents ??
-                                        null
-                                    )}
-                                  </>
-                                ) : null}
-                              </div>
-                            )}
+                          {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
+                            <div style={{ marginTop: 6, fontSize: 12, fontWeight: 950 }}>
+                              Totale: {eurFromCents(it.booking.total_amount_cents)}
+                              {it.booking?.paid_at ? (
+                                <>
+                                  {" "}• Incassato:{" "}
+                                  {eurFromCents(
+                                    it.booking.paid_amount_cents ??
+                                      it.booking.total_amount_cents ??
+                                      null
+                                  )}
+                                </>
+                              ) : null}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -790,18 +700,11 @@ export default function CalendarioAdmin() {
 
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 <label>
-                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>
-                    Durata
-                  </div>
+                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Durata</div>
                   <select
                     value={newMinutes}
                     onChange={(e) => setNewMinutes(Number(e.target.value))}
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      borderRadius: 10,
-                      border: "1px solid #ddd",
-                    }}
+                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   >
                     <option value={60}>60 min</option>
                     <option value={90}>90 min</option>
@@ -810,34 +713,20 @@ export default function CalendarioAdmin() {
                 </label>
 
                 <label>
-                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>
-                    Nome
-                  </div>
+                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Nome</div>
                   <input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      borderRadius: 10,
-                      border: "1px solid #ddd",
-                    }}
+                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   />
                 </label>
 
                 <label>
-                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>
-                    Telefono
-                  </div>
+                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Telefono</div>
                   <input
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      borderRadius: 10,
-                      border: "1px solid #ddd",
-                    }}
+                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   />
                 </label>
 
@@ -939,15 +828,7 @@ export default function CalendarioAdmin() {
             >
               <div style={{ fontSize: 18, fontWeight: 950 }}>Prenotazione</div>
 
-              <div
-                style={{
-                  marginTop: 6,
-                  display: "grid",
-                  gap: 4,
-                  fontSize: 13,
-                  opacity: 0.88,
-                }}
-              >
+              <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
                 <div><b>Nome:</b> {detailBooking.user_name}</div>
                 <div><b>Telefono:</b> {detailBooking.user_phone}</div>
                 <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}–{hhmm(detailBooking.end_ts)} • {date}</div>
@@ -959,25 +840,13 @@ export default function CalendarioAdmin() {
               <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
                 <div style={{ fontWeight: 950 }}>Segna pagato</div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 10,
-                    marginTop: 8,
-                  }}
-                >
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
                   <label>
                     <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Importo (€)</div>
                     <input
                       value={payAmount}
                       onChange={(e) => setPayAmount(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: 10,
-                        borderRadius: 10,
-                        border: "1px solid #ddd",
-                      }}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                       placeholder="es. 60,00"
                     />
                   </label>
@@ -987,12 +856,7 @@ export default function CalendarioAdmin() {
                     <select
                       value={payMethod}
                       onChange={(e) => setPayMethod(e.target.value as "CASH" | "CARD")}
-                      style={{
-                        width: "100%",
-                        padding: 10,
-                        borderRadius: 10,
-                        border: "1px solid #ddd",
-                      }}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                     >
                       <option value="CASH">Contanti</option>
                       <option value="CARD">Carta</option>
@@ -1005,25 +869,12 @@ export default function CalendarioAdmin() {
                   <input
                     value={paymentNote}
                     onChange={(e) => setPaymentNote(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: 10,
-                      borderRadius: 10,
-                      border: "1px solid #ddd",
-                      marginTop: 6,
-                    }}
+                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
                     placeholder="es. sconto, saldo, promo..."
                   />
                 </label>
 
-                <label
-                  style={{
-                    marginTop: 10,
-                    display: "flex",
-                    gap: 10,
-                    alignItems: "center",
-                  }}
-                >
+                <label style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
                   <input
                     type="checkbox"
                     checked={updateTotalAlso}
@@ -1048,15 +899,7 @@ export default function CalendarioAdmin() {
                   </div>
                 )}
 
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                    justifyContent: "space-between",
-                    marginTop: 14,
-                    flexWrap: "wrap",
-                  }}
-                >
+                <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 14, flexWrap: "wrap" }}>
                   <button
                     onClick={cancelBooking}
                     style={{

@@ -1,21 +1,40 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
-
-type Body = { bookingId: string; reason?: string };
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as Body;
-  if (!body?.bookingId) return NextResponse.json({ error: "bookingId mancante" }, { status: 400 });
+  try {
+    const body = await req.json();
+    const bookingId = body?.bookingId;
 
-  const { error } = await supabase
-    .from("bookings")
-    .update({
-      status: "CANCELED",
-      canceled_at: new Date().toISOString(),
-      canceled_reason: body.reason ?? null,
-    })
-    .eq("id", body.bookingId);
+    if (!bookingId) {
+      return NextResponse.json(
+        { error: "ID prenotazione mancante" },
+        { status: 400 }
+      );
+    }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { error } = await supabase
+      .from("bookings")
+      .delete()
+      .eq("id", bookingId);
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message || "Errore disdetta" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message || "server error" },
+      { status: 500 }
+    );
+  }
 }
