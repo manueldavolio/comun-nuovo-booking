@@ -7,10 +7,7 @@ export async function GET(req: Request) {
     const date = searchParams.get("date");
 
     if (!date) {
-      return NextResponse.json(
-        { error: "Missing date" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing date" }, { status: 400 });
     }
 
     const supabase = createClient(
@@ -21,45 +18,42 @@ export async function GET(req: Request) {
     const start = date + "T00:00:00";
     const end = date + "T23:59:59";
 
-    const { data: bookings, error } = await supabase
+    const resourcesRes = await supabase
+      .from("resources")
+      .select("id,name,is_active,is_public")
+      .order("name", { ascending: true });
+
+    if (resourcesRes.error) {
+      throw resourcesRes.error;
+    }
+
+    const bookingsRes = await supabase
       .from("bookings")
       .select("*")
       .gte("start_ts", start)
-      .lt("start_ts", end);
+      .lt("start_ts", end)
+      .order("start_ts", { ascending: true });
 
-    if (error) {
-      throw error;
+    if (bookingsRes.error) {
+      throw bookingsRes.error;
     }
 
-    const slots: Array<{ time: string; booking: any | null }> = [];
+    const blocksRes = await supabase
+      .from("admin_blocks")
+      .select("*")
+      .gte("start_ts", start)
+      .lt("start_ts", end)
+      .order("start_ts", { ascending: true });
 
-    let hour = 15;
-    let minute = 30;
-
-    while (hour < 23) {
-      const hh = String(hour).padStart(2, "0");
-      const mm = String(minute).padStart(2, "0");
-      const time = hh + ":" + mm;
-
-      const booking =
-        bookings?.find((b: any) =>
-          String(b.start_ts).includes(date + "T" + time)
-        ) || null;
-
-      slots.push({
-        time,
-        booking,
-      });
-
-      minute += 30;
-
-      if (minute === 60) {
-        minute = 0;
-        hour++;
-      }
+    if (blocksRes.error) {
+      throw blocksRes.error;
     }
 
-    return NextResponse.json({ slots });
+    return NextResponse.json({
+      resources: resourcesRes.data ?? [],
+      bookings: bookingsRes.data ?? [],
+      blocks: blocksRes.data ?? [],
+    });
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "server error" },
