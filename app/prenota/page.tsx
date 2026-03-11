@@ -163,7 +163,7 @@ export default function PrenotaPage() {
       <h1 style={{ fontSize: 28, fontWeight: 700 }}>Prenota</h1>
 
       <p style={{ marginTop: 6, opacity: 0.8 }}>
-        Pagamento online oppure caparra 5€ e saldo al bar.
+        Pagamento online oppure saldo al bar.
       </p>
 
       <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
@@ -269,7 +269,7 @@ export default function PrenotaPage() {
                 checked={payMode === "DEPOSIT"}
                 onChange={() => setPayMode("DEPOSIT")}
               />
-              Pago al bar (caparra 5€)
+              Pago al bar
             </label>
 
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
