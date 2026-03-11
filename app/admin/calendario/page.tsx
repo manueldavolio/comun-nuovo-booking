@@ -58,7 +58,7 @@ function getSchedule(dateStr: string) {
   const day = d.getUTCDay();
   const isWeekend = day === 0 || day === 6;
   if (isWeekend) return { openH: 8, openM: 0, closeH: 23, closeM: 0 };
-  return { openH: 15, openM: 30, closeH: 23, closeM: 0 };
+  return { openH: 9, openM: 30, closeH: 23, closeM: 0 };
 }
 
 function clamp(n: number, min: number, max: number) {
