@@ -467,6 +467,10 @@ export default function CalendarioAdmin() {
   const [detailBlock, setDetailBlock] = useState<Block | null>(null);
   const [blockErr, setBlockErr] = useState("");
 
+  const [draggingBookingId, setDraggingBookingId] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [suppressOpenBookingId, setSuppressOpenBookingId] = useState<string | null>(null);
+
   function openBlockDetail(bl: Block) {
     setDetailBlock(bl);
     setBlockErr("");
@@ -492,6 +496,37 @@ export default function CalendarioAdmin() {
       await load();
     } catch (e: any) {
       setBlockErr(e.message || "Errore eliminazione blocco");
+    }
+  }
+
+  async function moveBooking(bookingId: string, resourceId: string, startT: number) {
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (!booking) return;
+
+    const durationMs =
+      new Date(booking.end_ts).getTime() - new Date(booking.start_ts).getTime();
+
+    const startISO = new Date(startT).toISOString();
+    const endISO = new Date(startT + durationMs).toISOString();
+
+    try {
+      const r = await fetch("/api/admin/move-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId,
+          resourceId,
+          startISO,
+          endISO,
+        }),
+      });
+
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Errore spostamento prenotazione");
+
+      await load();
+    } catch (e: any) {
+      setMsg(e.message || "Errore spostamento prenotazione");
     }
   }
 
@@ -636,20 +671,53 @@ export default function CalendarioAdmin() {
                       borderRight: "1px solid #f0f0f0",
                     }}
                   >
-                    {timeRows.map((tr, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => openNewSlot(r.id, tr.t)}
-                        style={{
-                          height: rowH,
-                          borderBottom: "1px solid #f6f6f6",
-                          cursor: "pointer",
-                          position: "relative",
-                          zIndex: 1,
-                        }}
-                        title="Clicca per inserire prenotazione o bloccare il campo"
-                      />
-                    ))}
+                    {timeRows.map((tr, idx) => {
+                      const slotKey = `${r.id}-${tr.t}`;
+                      const isDragOver = dragOverKey === slotKey;
+
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            if (!draggingBookingId) openNewSlot(r.id, tr.t);
+                          }}
+                          onDragOver={(e) => {
+                            if (!draggingBookingId) return;
+                            e.preventDefault();
+                            setDragOverKey(slotKey);
+                          }}
+                          onDragLeave={() => {
+                            if (dragOverKey === slotKey) setDragOverKey(null);
+                          }}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            if (!draggingBookingId) return;
+
+                            await moveBooking(draggingBookingId, r.id, tr.t);
+                            setSuppressOpenBookingId(draggingBookingId);
+                            setDraggingBookingId(null);
+                            setDragOverKey(null);
+
+                            setTimeout(() => {
+                              setSuppressOpenBookingId(null);
+                            }, 250);
+                          }}
+                          style={{
+                            height: rowH,
+                            borderBottom: "1px solid #f6f6f6",
+                            cursor: draggingBookingId ? "grabbing" : "pointer",
+                            position: "relative",
+                            zIndex: 1,
+                            background: isDragOver ? "#eef6ff" : "transparent",
+                            outline: isDragOver ? "2px dashed #1e90ff" : "none",
+                            outlineOffset: -2,
+                          }}
+                          title="Clicca per inserire prenotazione o bloccare il campo"
+                        />
+                      );
+                    })}
 
                     {(itemsByRes.get(r.id) ?? []).map((it: any) => {
                       const top = clamp(topPx(it.start), 0, gridH);
@@ -660,6 +728,19 @@ export default function CalendarioAdmin() {
                       return (
                         <div
                           key={it.id}
+                          draggable={it.type === "BOOKING"}
+                          onDragStart={(e) => {
+                            if (it.type !== "BOOKING") return;
+                            setDraggingBookingId(it.booking.id);
+                            e.dataTransfer.effectAllowed = "move";
+                            e.dataTransfer.setData("text/plain", it.booking.id);
+                          }}
+                          onDragEnd={() => {
+                            setDragOverKey(null);
+                            setTimeout(() => {
+                              setDraggingBookingId(null);
+                            }, 0);
+                          }}
                           onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -667,6 +748,14 @@ export default function CalendarioAdmin() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
+
+                            if (
+                              suppressOpenBookingId &&
+                              it.type === "BOOKING" &&
+                              suppressOpenBookingId === it.booking.id
+                            ) {
+                              return;
+                            }
 
                             if (it.type === "BOOKING") {
                               openDetail(it.booking);
@@ -696,6 +785,7 @@ export default function CalendarioAdmin() {
                             cursor: "pointer",
                             zIndex: 20,
                             pointerEvents: "auto",
+                            opacity: draggingBookingId === it.id ? 0.55 : 1,
                           }}
                         >
                           <div
