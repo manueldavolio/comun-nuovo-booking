@@ -155,12 +155,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Dati mancanti" }, { status: 400 });
   }
 
-  if (![60, 90].includes(Number(body.minutes))) {
-    return NextResponse.json(
-      { error: "minutes deve essere 60 o 90" },
-      { status: 400 }
-    );
-  }
+  if (Number(body.minutes) < 60 || Number(body.minutes) > 600) {
+  return NextResponse.json({ error: "minutes non validi" }, { status: 400 });
+}
+
 
   const { data: resRow, error: rErr } = await supabase
     .from("resources")

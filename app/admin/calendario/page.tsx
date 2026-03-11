@@ -58,7 +58,7 @@ function getSchedule(dateStr: string) {
   const day = d.getUTCDay();
   const isWeekend = day === 0 || day === 6;
   if (isWeekend) return { openH: 8, openM: 0, closeH: 23, closeM: 0 };
-  return { openH: 9, openM: 30, closeH: 23, closeM: 0 };
+  return { openH: 9, openM: 0, closeH: 23, closeM: 0 };
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -800,14 +800,23 @@ export default function CalendarioAdmin() {
                 <label>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Durata</div>
                   <select
-                    value={newMinutes}
-                    onChange={(e) => setNewMinutes(Number(e.target.value))}
-                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-                  >
-                    <option value={60}>60 min</option>
-                    <option value={90}>90 min</option>
-                    <option value={120}>120 min</option>
-                  </select>
+  value={newMinutes}
+  onChange={(e) => setNewMinutes(Number(e.target.value))}
+  style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+>
+  <option value={60}>1 ora</option>
+  <option value={90}>1 ora e 30</option>
+  <option value={120}>2 ore</option>
+  <option value={180}>3 ore</option>
+  <option value={240}>4 ore</option>
+  <option value={300}>5 ore</option>
+  <option value={360}>6 ore</option>
+  <option value={420}>7 ore</option>
+  <option value={480}>8 ore</option>
+  <option value={540}>9 ore</option>
+  <option value={600}>10 ore</option>
+</select>
+
                 </label>
 
                 <label>
