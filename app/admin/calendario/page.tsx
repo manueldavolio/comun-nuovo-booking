@@ -131,6 +131,15 @@ export default function CalendarioAdmin() {
     load();
   }, [date]);
 
+  const orderedResources = useMemo(() => {
+    const order = ["Palazzetto", "Tendone", "Saletta palestra", "Spogliatoi"];
+    return [...resources].sort((a, b) => {
+      const ai = order.indexOf(a.name);
+      const bi = order.indexOf(b.name);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+  }, [resources]);
+
   const items = useMemo(() => {
     const out: Array<
       | {
@@ -191,7 +200,7 @@ export default function CalendarioAdmin() {
 
   const itemsByRes = useMemo(() => {
     const map = new Map<string, typeof items>();
-    for (const r of resources) map.set(r.id, []);
+    for (const r of orderedResources) map.set(r.id, []);
     for (const it of items) {
       const arr = map.get(it.resource_id) ?? [];
       arr.push(it);
@@ -201,7 +210,7 @@ export default function CalendarioAdmin() {
       arr.sort((a, b) => a.start - b.start);
     }
     return map;
-  }, [resources, items]);
+  }, [orderedResources, items]);
 
   function topPx(t: number) {
     const diffMin = (t - dayStart) / (60 * 1000);
@@ -418,7 +427,7 @@ export default function CalendarioAdmin() {
     return topPx(now);
   }, [dayStart, dayEnd]);
 
-  const minWidth = timeColW + resources.length * colW;
+  const minWidth = timeColW + orderedResources.length * colW;
 
   return (
     <div style={{ padding: 16 }}>
@@ -485,265 +494,274 @@ export default function CalendarioAdmin() {
           </div>
         )}
 
-        <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 14, overflow: "auto" }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: `${timeColW}px repeat(${resources.length}, ${colW}px)`,
-              position: "sticky",
-              top: 0,
-              zIndex: 5,
-              background: "#fafafa",
-              borderBottom: "1px solid #eee",
-              minWidth: minWidth,
-            }}
-          >
-            <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #eee" }} />
-            {resources.map((r) => (
-              <div
-                key={r.id}
-                style={{
-                  padding: 10,
-                  fontWeight: 900,
-                  borderRight: "1px solid #eee",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {r.name}
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
-            <div style={{ borderRight: "1px solid #eee" }}>
-              {timeRows.map((t, i) => (
+        <div
+          style={{
+            marginTop: 14,
+            border: "1px solid #eee",
+            borderRadius: 14,
+            overflowX: "auto",
+            overflowY: "hidden",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          <div style={{ minWidth: minWidth }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `${timeColW}px repeat(${orderedResources.length}, ${colW}px)`,
+                position: "sticky",
+                top: 0,
+                zIndex: 5,
+                background: "#fafafa",
+                borderBottom: "1px solid #eee",
+              }}
+            >
+              <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #eee" }} />
+              {orderedResources.map((r) => (
                 <div
-                  key={i}
+                  key={r.id}
                   style={{
-                    height: rowH,
-                    padding: "12px 8px",
-                    fontSize: 12,
+                    padding: 10,
                     fontWeight: 900,
-                    opacity: 0.7,
+                    fontSize: 18,
+                    borderRight: "1px solid #eee",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {t.label}
+                  {r.name}
                 </div>
               ))}
             </div>
 
-            <div style={{ position: "relative" }}>
-              <div style={{ display: "grid", gridTemplateColumns: `repeat(${resources.length}, ${colW}px)` }}>
-                {resources.map((r) => (
+            <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr` }}>
+              <div style={{ borderRight: "1px solid #eee" }}>
+                {timeRows.map((t, i) => (
                   <div
-                    key={r.id}
+                    key={i}
                     style={{
-                      position: "relative",
-                      height: gridH,
-                      borderRight: "1px solid #f0f0f0",
+                      height: rowH,
+                      padding: "12px 8px",
+                      fontSize: 12,
+                      fontWeight: 900,
+                      opacity: 0.7,
                     }}
                   >
-                    {timeRows.map((tr, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => openNewSlot(r.id, tr.t)}
-                        style={{
-                          height: rowH,
-                          borderBottom: "1px solid #f6f6f6",
-                          cursor: "pointer",
-                          position: "relative",
-                          zIndex: 1,
-                        }}
-                        title="Clicca per inserire prenotazione o bloccare il campo"
-                      />
-                    ))}
-
-                    {(itemsByRes.get(r.id) ?? []).map((it: any) => {
-                      const top = clamp(topPx(it.start), 0, gridH);
-                      const h = clamp(heightPx(it.start, it.end), 28, gridH - top);
-                      const isBlock = it.type === "BLOCK";
-                      const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
-
-                      return (
-  <div
-    key={it.id}
-    onMouseDown={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }}
-    onClick={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (it.type === "BOOKING") {
-        openDetail(it.booking);
-      }
-
-      if (it.type === "BLOCK") {
-        openBlockDetail(it.block);
-      }
-    }}
-    title={`${it.title}\n${it.subtitle}`}
-    style={{
-      position: "absolute",
-      left: 10,
-      right: 10,
-      top: top,
-      height: h,
-      borderRadius: 12,
-      background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
-      border: isBlock
-        ? "1px solid #f1c27d"
-        : paid
-        ? "1px solid #9ad19a"
-        : "1px solid #d0d0d0",
-      padding: 10,
-      boxSizing: "border-box",
-      overflow: "hidden",
-      cursor: "pointer",
-      zIndex: 20,
-      pointerEvents: "auto",
-    }}
-  >
-    <div
-  style={{
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 10,
-  }}
->
-  <div
-    style={{
-      fontWeight: 950,
-      fontSize: 13,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-    }}
-  >
-    {it.title}
-  </div>
-
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-    }}
-  >
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 950,
-        padding: "4px 8px",
-        borderRadius: 999,
-        background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
-        border: "1px solid rgba(0,0,0,0.08)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {it.badge}
-    </div>
-
-    {it.type === "BOOKING" ? (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          openDetail(it.booking);
-        }}
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          padding: "4px 8px",
-          borderRadius: 8,
-          border: "1px solid #ccc",
-          background: "white",
-          cursor: "pointer",
-        }}
-      >
-        Apri
-      </button>
-    ) : null}
-
-    {it.type === "BLOCK" ? (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          openBlockDetail(it.block);
-        }}
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          padding: "4px 8px",
-          borderRadius: 8,
-          border: "1px solid #e6b35c",
-          background: "white",
-          cursor: "pointer",
-        }}
-      >
-        Apri
-      </button>
-    ) : null}
-  </div>
-</div>
-
-<div
-  style={{
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: 800,
-    opacity: 0.85,
-  }}
->
-  {it.subtitle}
-</div>
-
-
-    {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 12,
-          fontWeight: 950,
-          pointerEvents: "none",
-        }}
-      >
-        Totale: {eurFromCents(it.booking.total_amount_cents)}
-        {it.booking?.paid_at ? (
-          <>
-            {" "}• Incassato:{" "}
-            {eurFromCents(
-              it.booking.paid_amount_cents ??
-                it.booking.total_amount_cents ??
-                null
-            )}
-          </>
-        ) : null}
-      </div>
-    )}
-  </div>
-);
-
-                    })}
+                    {t.label}
                   </div>
                 ))}
               </div>
 
-              {nowLineTop !== null && (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    top: nowLineTop,
-                    height: 2,
-                    background: "#1e90ff",
-                    opacity: 0.55,
-                  }}
-                />
-              )}
+              <div style={{ position: "relative" }}>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${orderedResources.length}, ${colW}px)` }}>
+                  {orderedResources.map((r) => (
+                    <div
+                      key={r.id}
+                      style={{
+                        position: "relative",
+                        height: gridH,
+                        borderRight: "1px solid #f0f0f0",
+                      }}
+                    >
+                      {timeRows.map((tr, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => openNewSlot(r.id, tr.t)}
+                          style={{
+                            height: rowH,
+                            borderBottom: "1px solid #f6f6f6",
+                            cursor: "pointer",
+                            position: "relative",
+                            zIndex: 1,
+                          }}
+                          title="Clicca per inserire prenotazione o bloccare il campo"
+                        />
+                      ))}
+
+                      {(itemsByRes.get(r.id) ?? []).map((it: any) => {
+                        const top = clamp(topPx(it.start), 0, gridH);
+                        const h = clamp(heightPx(it.start, it.end), 28, gridH - top);
+                        const isBlock = it.type === "BLOCK";
+                        const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
+
+                        return (
+                          <div
+                            key={it.id}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+
+                              if (it.type === "BOOKING") {
+                                openDetail(it.booking);
+                              }
+
+                              if (it.type === "BLOCK") {
+                                openBlockDetail(it.block);
+                              }
+                            }}
+                            title={`${it.title}\n${it.subtitle}`}
+                            style={{
+                              position: "absolute",
+                              left: 10,
+                              right: 10,
+                              top: top,
+                              height: h,
+                              borderRadius: 12,
+                              background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
+                              border: isBlock
+                                ? "1px solid #f1c27d"
+                                : paid
+                                ? "1px solid #9ad19a"
+                                : "1px solid #d0d0d0",
+                              padding: 10,
+                              boxSizing: "border-box",
+                              overflow: "hidden",
+                              cursor: "pointer",
+                              zIndex: 20,
+                              pointerEvents: "auto",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 10,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontWeight: 950,
+                                  fontSize: 13,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {it.title}
+                              </div>
+
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 950,
+                                    padding: "4px 8px",
+                                    borderRadius: 999,
+                                    background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
+                                    border: "1px solid rgba(0,0,0,0.08)",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {it.badge}
+                                </div>
+
+                                {it.type === "BOOKING" ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDetail(it.booking);
+                                    }}
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 900,
+                                      padding: "4px 8px",
+                                      borderRadius: 8,
+                                      border: "1px solid #ccc",
+                                      background: "white",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Apri
+                                  </button>
+                                ) : null}
+
+                                {it.type === "BLOCK" ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openBlockDetail(it.block);
+                                    }}
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 900,
+                                      padding: "4px 8px",
+                                      borderRadius: 8,
+                                      border: "1px solid #e6b35c",
+                                      background: "white",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Apri
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop: 6,
+                                fontSize: 12,
+                                fontWeight: 800,
+                                opacity: 0.85,
+                              }}
+                            >
+                              {it.subtitle}
+                            </div>
+
+                            {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
+                              <div
+                                style={{
+                                  marginTop: 6,
+                                  fontSize: 12,
+                                  fontWeight: 950,
+                                  pointerEvents: "none",
+                                }}
+                              >
+                                Totale: {eurFromCents(it.booking.total_amount_cents)}
+                                {it.booking?.paid_at ? (
+                                  <>
+                                    {" "}• Incassato:{" "}
+                                    {eurFromCents(
+                                      it.booking.paid_amount_cents ??
+                                        it.booking.total_amount_cents ??
+                                        null
+                                    )}
+                                  </>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                {nowLineTop !== null && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      top: nowLineTop,
+                      height: 2,
+                      background: "#1e90ff",
+                      opacity: 0.55,
+                    }}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>
