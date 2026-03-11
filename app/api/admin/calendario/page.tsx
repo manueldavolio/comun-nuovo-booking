@@ -58,11 +58,26 @@ function getSchedule(dateStr: string) {
   const day = d.getUTCDay();
   const isWeekend = day === 0 || day === 6;
   if (isWeekend) return { openH: 8, openM: 0, closeH: 23, closeM: 0 };
-  return { openH: 15, openM: 30, closeH: 23, closeM: 0 };
+  return { openH: 9, openM: 0, closeH: 23, closeM: 0 };
 }
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function isoDateLocal(iso: string) {
+  const d = new Date(iso);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function isoTimeLocal(iso: string) {
+  const d = new Date(iso);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mi}`;
 }
 
 export default function CalendarioAdmin() {
@@ -79,6 +94,16 @@ export default function CalendarioAdmin() {
   const timeColW = 78;
   const colW = 260;
   const rowH = 46;
+
+  const resourceOrder = ["Palazzetto", "Tendone", "Saletta palestra", "Spogliatoi"];
+
+  const orderedResources = useMemo(() => {
+    return [...resources].sort((a, b) => {
+      const ai = resourceOrder.indexOf(a.name);
+      const bi = resourceOrder.indexOf(b.name);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+  }, [resources]);
 
   const dayBase = useMemo(
     () => new Date(`${date}T00:00:00.000Z`).getTime(),
@@ -191,17 +216,17 @@ export default function CalendarioAdmin() {
 
   const itemsByRes = useMemo(() => {
     const map = new Map<string, typeof items>();
-    for (const r of resources) map.set(r.id, []);
+    for (const r of orderedResources) map.set(r.id, []);
     for (const it of items) {
       const arr = map.get(it.resource_id) ?? [];
       arr.push(it);
       map.set(it.resource_id, arr);
     }
-    for (const [k, arr] of map.entries()) {
+    for (const [, arr] of map.entries()) {
       arr.sort((a, b) => a.start - b.start);
     }
     return map;
-  }, [resources, items]);
+  }, [orderedResources, items]);
 
   function topPx(t: number) {
     const diffMin = (t - dayStart) / (60 * 1000);
@@ -303,6 +328,13 @@ export default function CalendarioAdmin() {
   const [updateTotalAlso, setUpdateTotalAlso] = useState(true);
   const [detailErr, setDetailErr] = useState("");
 
+  const [editResourceId, setEditResourceId] = useState("");
+  const [editDate, setEditDate] = useState(todayISODate());
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editMinutes, setEditMinutes] = useState(60);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+
   function openDetail(b: Booking) {
     setDetailBooking(b);
     const baseCents = b.paid_amount_cents ?? b.total_amount_cents ?? null;
@@ -315,7 +347,58 @@ export default function CalendarioAdmin() {
     setPaymentNote(b.payment_note ?? "");
     setUpdateTotalAlso(true);
     setDetailErr("");
+
+    const start = new Date(b.start_ts);
+    const end = new Date(b.end_ts);
+    const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
+
+    setEditResourceId(b.resource_id);
+    setEditDate(isoDateLocal(b.start_ts));
+    setEditStartTime(isoTimeLocal(b.start_ts));
+    setEditMinutes(minutes);
+    setEditName(b.user_name || "");
+    setEditPhone(b.user_phone || "");
+
     setDetailOpen(true);
+  }
+
+  async function saveBookingChanges() {
+    if (!detailBooking) return;
+
+    setDetailErr("");
+
+    if (!editResourceId || !editDate || !editStartTime || !editName.trim() || !editPhone.trim()) {
+      setDetailErr("Compila tutti i campi");
+      return;
+    }
+
+    const startISO = new Date(`${editDate}T${editStartTime}:00`).toISOString();
+    const endISO = new Date(
+      new Date(`${editDate}T${editStartTime}:00`).getTime() + editMinutes * 60 * 1000
+    ).toISOString();
+
+    try {
+      const r = await fetch("/api/admin/update-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: detailBooking.id,
+          resourceId: editResourceId,
+          startISO,
+          endISO,
+          userName: editName,
+          userPhone: editPhone,
+        }),
+      });
+
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Errore modifica prenotazione");
+
+      setDetailOpen(false);
+      await load();
+    } catch (e: any) {
+      setDetailErr(e.message || "Errore modifica prenotazione");
+    }
   }
 
   async function markPaid() {
@@ -418,7 +501,7 @@ export default function CalendarioAdmin() {
     return topPx(now);
   }, [dayStart, dayEnd]);
 
-  const minWidth = timeColW + resources.length * colW;
+  const minWidth = timeColW + orderedResources.length * colW;
 
   return (
     <div style={{ padding: 16 }}>
@@ -485,11 +568,20 @@ export default function CalendarioAdmin() {
           </div>
         )}
 
-        <div style={{ marginTop: 14, border: "1px solid #eee", borderRadius: 14, overflow: "auto" }}>
+        <div
+          style={{
+            marginTop: 14,
+            border: "1px solid #eee",
+            borderRadius: 14,
+            overflowX: "auto",
+            overflowY: "hidden",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: `${timeColW}px repeat(${resources.length}, ${colW}px)`,
+              gridTemplateColumns: `${timeColW}px repeat(${orderedResources.length}, ${colW}px)`,
               position: "sticky",
               top: 0,
               zIndex: 5,
@@ -499,12 +591,13 @@ export default function CalendarioAdmin() {
             }}
           >
             <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #eee" }} />
-            {resources.map((r) => (
+            {orderedResources.map((r) => (
               <div
                 key={r.id}
                 style={{
                   padding: 10,
                   fontWeight: 900,
+                  fontSize: 18,
                   borderRight: "1px solid #eee",
                   whiteSpace: "nowrap",
                 }}
@@ -533,8 +626,8 @@ export default function CalendarioAdmin() {
             </div>
 
             <div style={{ position: "relative" }}>
-              <div style={{ display: "grid", gridTemplateColumns: `repeat(${resources.length}, ${colW}px)` }}>
-                {resources.map((r) => (
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(${orderedResources.length}, ${colW}px)` }}>
+                {orderedResources.map((r) => (
                   <div
                     key={r.id}
                     style={{
@@ -565,167 +658,165 @@ export default function CalendarioAdmin() {
                       const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
 
                       return (
-  <div
-    key={it.id}
-    onMouseDown={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }}
-    onClick={(e) => {
-      e.preventDefault();
-      e.stopPropagation();
+                        <div
+                          key={it.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
 
-      if (it.type === "BOOKING") {
-        openDetail(it.booking);
-      }
+                            if (it.type === "BOOKING") {
+                              openDetail(it.booking);
+                            }
 
-      if (it.type === "BLOCK") {
-        openBlockDetail(it.block);
-      }
-    }}
-    title={`${it.title}\n${it.subtitle}`}
-    style={{
-      position: "absolute",
-      left: 10,
-      right: 10,
-      top: top,
-      height: h,
-      borderRadius: 12,
-      background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
-      border: isBlock
-        ? "1px solid #f1c27d"
-        : paid
-        ? "1px solid #9ad19a"
-        : "1px solid #d0d0d0",
-      padding: 10,
-      boxSizing: "border-box",
-      overflow: "hidden",
-      cursor: "pointer",
-      zIndex: 20,
-      pointerEvents: "auto",
-    }}
-  >
-    <div
-  style={{
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 10,
-  }}
->
-  <div
-    style={{
-      fontWeight: 950,
-      fontSize: 13,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-    }}
-  >
-    {it.title}
-  </div>
+                            if (it.type === "BLOCK") {
+                              openBlockDetail(it.block);
+                            }
+                          }}
+                          title={`${it.title}\n${it.subtitle}`}
+                          style={{
+                            position: "absolute",
+                            left: 10,
+                            right: 10,
+                            top: top,
+                            height: h,
+                            borderRadius: 12,
+                            background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
+                            border: isBlock
+                              ? "1px solid #f1c27d"
+                              : paid
+                              ? "1px solid #9ad19a"
+                              : "1px solid #d0d0d0",
+                            padding: 10,
+                            boxSizing: "border-box",
+                            overflow: "hidden",
+                            cursor: "pointer",
+                            zIndex: 20,
+                            pointerEvents: "auto",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 10,
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontWeight: 950,
+                                fontSize: 13,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {it.title}
+                            </div>
 
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-    }}
-  >
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 950,
-        padding: "4px 8px",
-        borderRadius: 999,
-        background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
-        border: "1px solid rgba(0,0,0,0.08)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {it.badge}
-    </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 950,
+                                  padding: "4px 8px",
+                                  borderRadius: 999,
+                                  background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
+                                  border: "1px solid rgba(0,0,0,0.08)",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {it.badge}
+                              </div>
 
-    {it.type === "BOOKING" ? (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          openDetail(it.booking);
-        }}
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          padding: "4px 8px",
-          borderRadius: 8,
-          border: "1px solid #ccc",
-          background: "white",
-          cursor: "pointer",
-        }}
-      >
-        Apri
-      </button>
-    ) : null}
+                              {it.type === "BOOKING" ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDetail(it.booking);
+                                  }}
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 900,
+                                    padding: "4px 8px",
+                                    borderRadius: 8,
+                                    border: "1px solid #ccc",
+                                    background: "white",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Apri
+                                </button>
+                              ) : null}
 
-    {it.type === "BLOCK" ? (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          openBlockDetail(it.block);
-        }}
-        style={{
-          fontSize: 11,
-          fontWeight: 900,
-          padding: "4px 8px",
-          borderRadius: 8,
-          border: "1px solid #e6b35c",
-          background: "white",
-          cursor: "pointer",
-        }}
-      >
-        Apri
-      </button>
-    ) : null}
-  </div>
-</div>
+                              {it.type === "BLOCK" ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openBlockDetail(it.block);
+                                  }}
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 900,
+                                    padding: "4px 8px",
+                                    borderRadius: 8,
+                                    border: "1px solid #e6b35c",
+                                    background: "white",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Apri
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
 
-<div
-  style={{
-    marginTop: 6,
-    fontSize: 12,
-    fontWeight: 800,
-    opacity: 0.85,
-  }}
->
-  {it.subtitle}
-</div>
+                          <div
+                            style={{
+                              marginTop: 6,
+                              fontSize: 12,
+                              fontWeight: 800,
+                              opacity: 0.85,
+                            }}
+                          >
+                            {it.subtitle}
+                          </div>
 
-
-    {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
-      <div
-        style={{
-          marginTop: 6,
-          fontSize: 12,
-          fontWeight: 950,
-          pointerEvents: "none",
-        }}
-      >
-        Totale: {eurFromCents(it.booking.total_amount_cents)}
-        {it.booking?.paid_at ? (
-          <>
-            {" "}• Incassato:{" "}
-            {eurFromCents(
-              it.booking.paid_amount_cents ??
-                it.booking.total_amount_cents ??
-                null
-            )}
-          </>
-        ) : null}
-      </div>
-    )}
-  </div>
-);
-
+                          {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                fontSize: 12,
+                                fontWeight: 950,
+                                pointerEvents: "none",
+                              }}
+                            >
+                              Totale: {eurFromCents(it.booking.total_amount_cents)}
+                              {it.booking?.paid_at ? (
+                                <>
+                                  {" "}• Incassato:{" "}
+                                  {eurFromCents(
+                                    it.booking.paid_amount_cents ??
+                                      it.booking.total_amount_cents ??
+                                      null
+                                  )}
+                                </>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      );
                     })}
                   </div>
                 ))}
@@ -786,9 +877,17 @@ export default function CalendarioAdmin() {
                     onChange={(e) => setNewMinutes(Number(e.target.value))}
                     style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   >
-                    <option value={60}>60 min</option>
-                    <option value={90}>90 min</option>
-                    <option value={120}>120 min</option>
+                    <option value={60}>1 ora</option>
+                    <option value={90}>1 ora e 30</option>
+                    <option value={120}>2 ore</option>
+                    <option value={180}>3 ore</option>
+                    <option value={240}>4 ore</option>
+                    <option value={300}>5 ore</option>
+                    <option value={360}>6 ore</option>
+                    <option value={420}>7 ore</option>
+                    <option value={480}>8 ore</option>
+                    <option value={540}>9 ore</option>
+                    <option value={600}>10 ore</option>
                   </select>
                 </label>
 
@@ -898,7 +997,7 @@ export default function CalendarioAdmin() {
             <div
               onClick={(e) => e.stopPropagation()}
               style={{
-                width: 560,
+                width: 700,
                 maxWidth: "100%",
                 background: "white",
                 borderRadius: 16,
@@ -908,13 +1007,90 @@ export default function CalendarioAdmin() {
             >
               <div style={{ fontSize: 18, fontWeight: 950 }}>Prenotazione</div>
 
-              <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
-                <div><b>Nome:</b> {detailBooking.user_name}</div>
-                <div><b>Telefono:</b> {detailBooking.user_phone}</div>
-                <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}–{hhmm(detailBooking.end_ts)} • {date}</div>
-                <div><b>Totale:</b> {eurFromCents(detailBooking.total_amount_cents ?? null)}</div>
-                <div><b>Stato pagamento:</b> {detailBooking.paid_at ? "Pagata" : "Da pagare"}</div>
-                {detailBooking.payment_note ? <div><b>Nota:</b> {detailBooking.payment_note}</div> : null}
+              <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
+                <label>
+                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Spazio</div>
+                  <select
+                    value={editResourceId}
+                    onChange={(e) => setEditResourceId(e.target.value)}
+                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
+                  >
+                    {orderedResources.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                  <label>
+                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Data</div>
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
+                    />
+                  </label>
+
+                  <label>
+                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Ora inizio</div>
+                    <input
+                      type="time"
+                      value={editStartTime}
+                      onChange={(e) => setEditStartTime(e.target.value)}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
+                    />
+                  </label>
+
+                  <label>
+                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Durata</div>
+                    <select
+                      value={editMinutes}
+                      onChange={(e) => setEditMinutes(Number(e.target.value))}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
+                    >
+                      <option value={60}>1 ora</option>
+                      <option value={90}>1 ora e 30</option>
+                      <option value={120}>2 ore</option>
+                      <option value={180}>3 ore</option>
+                      <option value={240}>4 ore</option>
+                      <option value={300}>5 ore</option>
+                      <option value={360}>6 ore</option>
+                      <option value={420}>7 ore</option>
+                      <option value={480}>8 ore</option>
+                      <option value={540}>9 ore</option>
+                      <option value={600}>10 ore</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <label>
+                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Nome</div>
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
+                    />
+                  </label>
+
+                  <label>
+                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Telefono</div>
+                    <input
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
+                    />
+                  </label>
+                </div>
+
+                <div style={{ display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
+                  <div><b>Totale:</b> {eurFromCents(detailBooking.total_amount_cents ?? null)}</div>
+                  <div><b>Stato pagamento:</b> {detailBooking.paid_at ? "Pagata" : "Da pagare"}</div>
+                  {detailBooking.payment_note ? <div><b>Nota:</b> {detailBooking.payment_note}</div> : null}
+                </div>
               </div>
 
               <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
@@ -994,6 +1170,19 @@ export default function CalendarioAdmin() {
                   </button>
 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      onClick={saveBookingChanges}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        border: "1px solid #111",
+                        background: "white",
+                        fontWeight: 950,
+                      }}
+                    >
+                      Salva modifiche
+                    </button>
+
                     <a
                       href={`/admin/ricevuta/${detailBooking.id}`}
                       target="_blank"

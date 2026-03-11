@@ -24,16 +24,16 @@ function parseHHMM(s: string) {
   return { hh, mm };
 }
 
-// JS: getUTCDay() -> 0 dom .. 6 sab
+// JS: getDay() -> 0 dom .. 6 sab
 // Noi: weekday 1..7 (lun..dom)
-function weekdayToUTCDay(weekday: number) {
+function weekdayToDay(weekday: number) {
   if (weekday === 7) return 0;
   return weekday; // 1..6 ok
 }
 
-function addDays(d: Date, days: number) {
+function addDaysLocal(d: Date, days: number) {
   const x = new Date(d);
-  x.setUTCDate(x.getUTCDate() + days);
+  x.setDate(x.getDate() + days);
   return x;
 }
 
@@ -66,14 +66,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Orario non valido (HH:MM multipli di 30)" }, { status: 400 });
   }
 
-  // ✅ QUI il fix: backtick
-  const startDate = new Date(`${body.startDate}T00:00:00.000Z`);
-  const endDate = new Date(`${body.endDate}T00:00:00.000Z`);
+  // IMPORTANTE: usiamo orario locale, non UTC
+  const startDate = new Date(body.startDate + "T00:00:00");
+  const endDate = new Date(body.endDate + "T00:00:00");
+
   if (!(startDate <= endDate)) {
     return NextResponse.json({ error: "startDate > endDate" }, { status: 400 });
   }
 
-  // salva subscription (con prezzo fisso)
   const { data: sub, error: sErr } = await supabase
     .from("subscriptions")
     .insert({
@@ -92,25 +92,32 @@ export async function POST(req: Request) {
     .select("id")
     .single();
 
-  if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 });
+  if (sErr) {
+    return NextResponse.json({ error: sErr.message }, { status: 500 });
+  }
 
-  // prima data col weekday giusto
-  const targetUTCDay = weekdayToUTCDay(body.weekday);
+  const targetDay = weekdayToDay(body.weekday);
   let d = new Date(startDate);
-  while (d.getUTCDay() !== targetUTCDay) d = addDays(d, 1);
+
+  while (d.getDay() !== targetDay) {
+    d = addDaysLocal(d, 1);
+  }
 
   const conflicts: string[] = [];
   let created = 0;
 
   while (d <= endDate) {
     const start = new Date(d);
-    start.setUTCHours(st.hh, st.mm, 0, 0);
+    start.setHours(st.hh, st.mm, 0, 0);
 
     const end = new Date(d);
-    end.setUTCHours(et.hh, et.mm, 0, 0);
+    end.setHours(et.hh, et.mm, 0, 0);
 
     if (end.getTime() <= start.getTime()) {
-      return NextResponse.json({ error: "endTime deve essere dopo startTime (stesso giorno)" }, { status: 400 });
+      return NextResponse.json(
+        { error: "endTime deve essere dopo startTime (stesso giorno)" },
+        { status: 400 }
+      );
     }
 
     const row = {
@@ -121,7 +128,7 @@ export async function POST(req: Request) {
       end_ts: end.toISOString(),
       status: "CONFIRMED",
       pay_mode: "SUBSCRIPTION",
-      total_amount_cents: body.priceCents, // ✅ fisso
+      total_amount_cents: body.priceCents,
       deposit_amount_cents: 0,
       currency: "eur",
       subscription_id: sub.id,
@@ -131,8 +138,13 @@ export async function POST(req: Request) {
     if (error) conflicts.push(row.start_ts);
     else created += 1;
 
-    d = addDays(d, 7);
+    d = addDaysLocal(d, 7);
   }
 
-  return NextResponse.json({ ok: true, subscriptionId: sub.id, created, conflicts });
+  return NextResponse.json({
+    ok: true,
+    subscriptionId: sub.id,
+    created,
+    conflicts,
+  });
 }
