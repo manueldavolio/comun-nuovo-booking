@@ -9,6 +9,7 @@ type Body = {
   userName: string;
   userPhone: string;
   payMode?: "BAR" | "FULL" | "DEPOSIT";
+  source?: string | null;
 };
 
 const PRICE_PER_HOUR_CENTS: Record<string, number> = {
@@ -196,6 +197,7 @@ export async function POST(req: Request) {
       total_amount_cents: totalCents,
       deposit_amount_cents: 500,
       currency: "eur",
+      source: body.source ?? null,
     })
     .select("id")
     .single();
