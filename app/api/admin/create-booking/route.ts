@@ -22,16 +22,18 @@ function calcTotalCents(resourceName: string, minutes: number) {
   return Math.round(perHour * (minutes / 60));
 }
 
-async function upsertCustomer(name: string, phone: string, bookingDateISO: string) {
+async function upsertCustomer(
+  name: string,
+  phone: string,
+  bookingDateISO: string
+) {
   const { data: existing, error: findError } = await supabase
     .from("customers")
     .select("id, bookings_count")
     .eq("phone", phone)
     .maybeSingle();
 
-  if (findError) {
-    throw new Error(findError.message);
-  }
+  if (findError) throw new Error(findError.message);
 
   if (!existing) {
     const { error: insertError } = await supabase.from("customers").insert({
@@ -42,10 +44,7 @@ async function upsertCustomer(name: string, phone: string, bookingDateISO: strin
       bookings_count: 1,
     });
 
-    if (insertError) {
-      throw new Error(insertError.message);
-    }
-
+    if (insertError) throw new Error(insertError.message);
     return;
   }
 
@@ -59,30 +58,48 @@ async function upsertCustomer(name: string, phone: string, bookingDateISO: strin
     })
     .eq("id", existing.id);
 
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
+  if (updateError) throw new Error(updateError.message);
 }
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Body;
 
-  if (!body?.resourceId || !body?.startISO || !body?.endISO || !body?.userName || !body?.userPhone) {
+  if (
+    !body?.resourceId ||
+    !body?.startISO ||
+    !body?.endISO ||
+    !body?.userName ||
+    !body?.userPhone
+  ) {
     return NextResponse.json({ error: "Dati mancanti" }, { status: 400 });
   }
 
   if (![60, 90].includes(Number(body.minutes))) {
-    return NextResponse.json({ error: "minutes deve essere 60 o 90" }, { status: 400 });
+    return NextResponse.json(
+      { error: "minutes deve essere 60 o 90" },
+      { status: 400 }
+    );
   }
 
   const { data: resRow, error: rErr } = await supabase
     .from("resources")
-    .select("id,name,is_active")
+    .select("id, name, is_active")
     .eq("id", body.resourceId)
     .single();
 
-  if (rErr || !resRow) return NextResponse.json({ error: "Risorsa non trovata" }, { status: 404 });
-  if (!resRow.is_active) return NextResponse.json({ error: "Risorsa non attiva" }, { status: 400 });
+  if (rErr || !resRow) {
+    return NextResponse.json(
+      { error: "Risorsa non trovata" },
+      { status: 404 }
+    );
+  }
+
+  if (!resRow.is_active) {
+    return NextResponse.json(
+      { error: "Risorsa non attiva" },
+      { status: 400 }
+    );
+  }
 
   const totalCents = calcTotalCents(resRow.name, body.minutes);
 
@@ -104,7 +121,10 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: "Slot non disponibile (già prenotato)" }, { status: 409 });
+    return NextResponse.json(
+      { error: "Slot non disponibile (già prenotato)" },
+      { status: 409 }
+    );
   }
 
   try {
@@ -119,5 +139,10 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, bookingId: data.id, totalCents, customerSaved: true });
+  return NextResponse.json({
+    ok: true,
+    bookingId: data.id,
+    totalCents,
+    customerSaved: true,
+  });
 }
