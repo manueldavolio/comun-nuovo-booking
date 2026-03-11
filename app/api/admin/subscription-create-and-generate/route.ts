@@ -4,14 +4,14 @@ import { supabase } from "@/lib/supabase";
 type Body = {
   title: string;
   resourceId: string;
-  weekday: number;
-  startTime: string;
-  endTime: string;
-  startDate: string;
-  endDate: string;
+  weekday: number; // 1=lun ... 7=dom
+  startTime: string; // "20:00"
+  endTime: string;   // "22:00"
+  startDate: string; // "2026-03-01"
+  endDate: string;   // "2026-06-30"
   userName: string;
   userPhone: string;
-  priceCents: number;
+  priceCents: number; // prezzo fisso per ogni data
 };
 
 function parseHHMM(s: string) {
@@ -19,30 +19,58 @@ function parseHHMM(s: string) {
   if (!m) return null;
   const hh = Number(m[1]);
   const mm = Number(m[2]);
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
   if (mm % 30 !== 0) return null;
   return { hh, mm };
 }
 
-function weekdayToJS(weekday: number) {
-  return weekday === 7 ? 0 : weekday;
+// JS locale: getDay() -> 0 dom .. 6 sab
+function weekdayToJSDay(weekday: number) {
+  if (weekday === 7) return 0;
+  return weekday;
 }
 
-function addDays(d: Date, n: number) {
+function addDaysLocal(d: Date, days: number) {
   const x = new Date(d);
-  x.setDate(x.getDate() + n);
+  x.setDate(x.getDate() + days);
   return x;
 }
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Body;
 
+  if (
+    !body?.title ||
+    !body?.resourceId ||
+    !body?.weekday ||
+    !body?.startTime ||
+    !body?.endTime ||
+    !body?.startDate ||
+    !body?.endDate ||
+    !body?.userName ||
+    !body?.userPhone ||
+    !Number.isFinite(body.priceCents) ||
+    body.priceCents <= 0
+  ) {
+    return NextResponse.json({ error: "Dati mancanti/non validi" }, { status: 400 });
+  }
+
+  if (body.weekday < 1 || body.weekday > 7) {
+    return NextResponse.json({ error: "weekday deve essere 1..7 (lun..dom)" }, { status: 400 });
+  }
+
   const st = parseHHMM(body.startTime);
   const et = parseHHMM(body.endTime);
-  if (!st || !et)
-    return NextResponse.json({ error: "Orari non validi" }, { status: 400 });
+  if (!st || !et) {
+    return NextResponse.json({ error: "Orario non valido (HH:MM multipli di 30)" }, { status: 400 });
+  }
 
-  const startDate = new Date(body.startDate);
-  const endDate = new Date(body.endDate);
+  const startDate = new Date(`${body.startDate}T00:00:00`);
+  const endDate = new Date(`${body.endDate}T00:00:00`);
+
+  if (!(startDate <= endDate)) {
+    return NextResponse.json({ error: "startDate > endDate" }, { status: 400 });
+  }
 
   const { data: sub, error: sErr } = await supabase
     .from("subscriptions")
@@ -62,16 +90,19 @@ export async function POST(req: Request) {
     .select("id")
     .single();
 
-  if (sErr)
+  if (sErr) {
     return NextResponse.json({ error: sErr.message }, { status: 500 });
+  }
 
-  const targetDay = weekdayToJS(body.weekday);
-
+  const targetDay = weekdayToJSDay(body.weekday);
   let d = new Date(startDate);
-  while (d.getDay() !== targetDay) d = addDays(d, 1);
 
-  let created = 0;
+  while (d.getDay() !== targetDay) {
+    d = addDaysLocal(d, 1);
+  }
+
   const conflicts: string[] = [];
+  let created = 0;
 
   while (d <= endDate) {
     const start = new Date(d);
@@ -80,7 +111,14 @@ export async function POST(req: Request) {
     const end = new Date(d);
     end.setHours(et.hh, et.mm, 0, 0);
 
-    const { error } = await supabase.from("bookings").insert({
+    if (end.getTime() <= start.getTime()) {
+      return NextResponse.json(
+        { error: "endTime deve essere dopo startTime (stesso giorno)" },
+        { status: 400 }
+      );
+    }
+
+    const row = {
       resource_id: body.resourceId,
       user_name: body.userName,
       user_phone: body.userPhone,
@@ -89,15 +127,22 @@ export async function POST(req: Request) {
       status: "CONFIRMED",
       pay_mode: "SUBSCRIPTION",
       total_amount_cents: body.priceCents,
+      deposit_amount_cents: 0,
       currency: "eur",
       subscription_id: sub.id,
-    });
+    };
 
-    if (error) conflicts.push(start.toISOString());
-    else created++;
+    const { error } = await supabase.from("bookings").insert(row);
+    if (error) conflicts.push(row.start_ts);
+    else created += 1;
 
-    d = addDays(d, 7);
+    d = addDaysLocal(d, 7);
   }
 
-  return NextResponse.json({ ok: true, created, conflicts });
+  return NextResponse.json({
+    ok: true,
+    subscriptionId: sub.id,
+    created,
+    conflicts,
+  });
 }
