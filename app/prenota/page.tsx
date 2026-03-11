@@ -2,8 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Resource = { id: string; name: string; is_public: boolean; is_active: boolean };
-type Slot = { startISO: string; endISO: string };
+type Resource = {
+  id: string;
+  name: string;
+  is_public: boolean;
+  is_active: boolean;
+};
+
+type Slot = {
+  startISO: string;
+  endISO: string;
+};
 
 function formatLocal(iso: string) {
   const d = new Date(iso);
@@ -20,27 +29,32 @@ function todayISODate() {
 
 export default function PrenotaPage() {
   const [resources, setResources] = useState<Resource[]>([]);
-  const publicResources = useMemo(() => resources.filter((r) => r.is_public), [resources]);
+  const publicResources = useMemo(
+    () => resources.filter((r) => r.is_public && r.is_active),
+    [resources]
+  );
 
   const [resourceId, setResourceId] = useState<string>("");
   const [date, setDate] = useState<string>(todayISODate());
   const [minutes, setMinutes] = useState<60 | 90>(60);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
-
   const [userName, setUserName] = useState("");
   const [userPhone, setUserPhone] = useState("");
-
   const [payMode, setPayMode] = useState<"FULL" | "DEPOSIT">("DEPOSIT");
-
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string>("");
 
   useEffect(() => {
     (async () => {
-      const r = await fetch("/api/resources");
-      const j = await r.json();
-      setResources(j.resources ?? []);
+      try {
+        const r = await fetch("/api/resources");
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Errore caricamento spazi");
+        setResources(j.resources ?? []);
+      } catch (e: any) {
+        setMsg(e.message || "Errore caricamento spazi");
+      }
     })();
   }, []);
 
@@ -48,15 +62,16 @@ export default function PrenotaPage() {
     setSelectedSlot(null);
     setSlots([]);
     setMsg("");
+
     if (!resourceId) return;
 
     (async () => {
       setLoading(true);
       try {
         const r = await fetch(
-          `/api/availability?resourceId=${encodeURIComponent(resourceId)}&date=${encodeURIComponent(
-            date
-          )}&minutes=${minutes}`
+          `/api/availability?resourceId=${encodeURIComponent(
+            resourceId
+          )}&date=${encodeURIComponent(date)}&minutes=${minutes}`
         );
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "Errore availability");
@@ -69,7 +84,7 @@ export default function PrenotaPage() {
     })();
   }, [resourceId, date, minutes]);
 
-    async function goCheckout() {
+  async function goCheckout() {
     if (!resourceId || !selectedSlot) return setMsg("Seleziona spazio e slot.");
     if (!userName.trim() || !userPhone.trim()) return setMsg("Inserisci nome e telefono.");
 
@@ -128,11 +143,10 @@ export default function PrenotaPage() {
 
       setMsg("✅ Prenotazione confermata! Pagherai al bar.");
 
-      // ricarica gli slot per far sparire quello prenotato
       const rr = await fetch(
-        `/api/availability?resourceId=${encodeURIComponent(resourceId)}&date=${encodeURIComponent(
-          date
-        )}&minutes=${minutes}`
+        `/api/availability?resourceId=${encodeURIComponent(
+          resourceId
+        )}&date=${encodeURIComponent(date)}&minutes=${minutes}`
       );
       const jj = await rr.json();
       setSlots(jj.slots ?? []);
@@ -147,6 +161,7 @@ export default function PrenotaPage() {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 20 }}>
       <h1 style={{ fontSize: 28, fontWeight: 700 }}>Prenota</h1>
+
       <p style={{ marginTop: 6, opacity: 0.8 }}>
         Pagamento online oppure caparra 5€ e saldo al bar.
       </p>
@@ -194,12 +209,14 @@ export default function PrenotaPage() {
 
         <div style={{ marginTop: 6 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Slot disponibili</div>
+
           {loading && <div>Carico…</div>}
           {!loading && resourceId && slots.length === 0 && <div>Nessuno slot disponibile.</div>}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
             {slots.map((s) => {
               const active = selectedSlot?.startISO === s.startISO;
+
               return (
                 <button
                   key={s.startISO}
@@ -254,8 +271,13 @@ export default function PrenotaPage() {
               />
               Pago al bar (caparra 5€)
             </label>
+
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input type="radio" checked={payMode === "FULL"} onChange={() => setPayMode("FULL")} />
+              <input
+                type="radio"
+                checked={payMode === "FULL"}
+                onChange={() => setPayMode("FULL")}
+              />
               Pago online (totale)
             </label>
           </div>
@@ -274,38 +296,41 @@ export default function PrenotaPage() {
           </div>
         )}
 
-        <button
-          disabled={loading}
-          onClick={goCheckout}
-          style={{
-            marginTop: 8,
-            padding: 14,
-            borderRadius: 14,
-            border: "none",
-            background: "#111",
-            color: "white",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          Vai al pagamento
-<button
-  disabled={loading}
-  onClick={bookNow}
-  style={{
-    padding: 14,
-    borderRadius: 14,
-    border: "1px solid #111",
-    background: "white",
-    color: "#111",
-    fontWeight: 700,
-    cursor: "pointer",
-  }}
->
-  Prenota e pago al bar
-</button>
+        <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+          <button
+            disabled={loading}
+            onClick={goCheckout}
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              border: "none",
+              background: "#111",
+              color: "white",
+              fontWeight: 700,
+              cursor: "pointer",
+              minWidth: 220,
+            }}
+          >
+            Vai al pagamento
+          </button>
 
-        </button>
+          <button
+            disabled={loading}
+            onClick={bookNow}
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              border: "1px solid #111",
+              background: "white",
+              color: "#111",
+              fontWeight: 700,
+              cursor: "pointer",
+              minWidth: 220,
+            }}
+          >
+            Prenota e pago al bar
+          </button>
+        </div>
       </div>
     </div>
   );
