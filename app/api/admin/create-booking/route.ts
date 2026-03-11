@@ -22,6 +22,86 @@ function calcTotalCents(resourceName: string, minutes: number) {
   return Math.round(perHour * (minutes / 60));
 }
 
+function normalizePhoneForWhatsApp(phone: string) {
+  const digits = (phone || "").replace(/\D/g, "");
+
+  if (!digits) return "";
+
+  if (digits.startsWith("39")) return digits;
+  if (digits.startsWith("0")) return `39${digits.slice(1)}`;
+
+  return `39${digits}`;
+}
+
+function formatTimeLabel(startISO: string, endISO: string) {
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return `${pad(start.getHours())}:${pad(start.getMinutes())} - ${pad(
+    end.getHours()
+  )}:${pad(end.getMinutes())}`;
+}
+
+async function sendWhatsAppBookingConfirmation(params: {
+  to: string;
+  fieldName: string;
+  timeLabel: string;
+}) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!token || !phoneNumberId) {
+    console.log("WhatsApp non configurato: manca token o phone number id");
+    return;
+  }
+
+  const to = normalizePhoneForWhatsApp(params.to);
+
+  if (!to) {
+    console.log("WhatsApp non inviato: numero non valido");
+    return;
+  }
+
+  const response = await fetch(
+    `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: "prenotazione",
+          language: { code: "it" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: params.fieldName },
+                { type: "text", text: params.timeLabel },
+              ],
+            },
+          ],
+        },
+      }),
+    }
+  );
+
+  const json = await response.json();
+
+  if (!response.ok) {
+    console.error("Errore invio WhatsApp:", json);
+  } else {
+    console.log("WhatsApp inviato:", json);
+  }
+}
+
 async function upsertCustomer(
   name: string,
   phone: string,
@@ -137,6 +217,16 @@ export async function POST(req: Request) {
       },
       { status: 500 }
     );
+  }
+
+  try {
+    await sendWhatsAppBookingConfirmation({
+      to: body.userPhone,
+      fieldName: resRow.name,
+      timeLabel: formatTimeLabel(body.startISO, body.endISO),
+    });
+  } catch (e) {
+    console.error("Errore invio WhatsApp post-prenotazione:", e);
   }
 
   return NextResponse.json({
