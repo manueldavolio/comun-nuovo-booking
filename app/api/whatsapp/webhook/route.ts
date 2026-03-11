@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(challenge || "", { status: 200 });
   }
 
-  return NextResponse.json({ error: "Verification failed" }, { status: 403 });
+  return new NextResponse("Verification failed", { status: 403 });
 }
 
 export async function POST(req: NextRequest) {
@@ -170,7 +170,13 @@ export async function POST(req: NextRequest) {
 
     const start = new Date(parsed.startISO);
     const end = new Date(start.getTime() + parsed.minutes * 60 * 1000);
-    const endISO = end.toISOString().slice(0, 19);
+    const yyyy = end.getFullYear();
+    const mm = String(end.getMonth() + 1).padStart(2, "0");
+    const dd = String(end.getDate()).padStart(2, "0");
+    const hh = String(end.getHours()).padStart(2, "0");
+    const mi = String(end.getMinutes()).padStart(2, "0");
+    const ss = String(end.getSeconds()).padStart(2, "0");
+    const endISO = `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`;
 
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
