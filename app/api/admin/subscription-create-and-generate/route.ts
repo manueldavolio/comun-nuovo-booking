@@ -17,17 +17,21 @@ type Body = {
 function parseHHMM(s: string) {
   const m = /^(\d{2}):(\d{2})$/.exec(s);
   if (!m) return null;
+
   const hh = Number(m[1]);
   const mm = Number(m[2]);
+
   if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
   if (mm % 30 !== 0) return null;
+
   return { hh, mm };
 }
 
 // JS locale: getDay() -> 0 dom .. 6 sab
+// Noi: weekday 1..7 (lun..dom)
 function weekdayToJSDay(weekday: number) {
   if (weekday === 7) return 0;
-  return weekday;
+  return weekday; // 1..6 ok
 }
 
 function addDaysLocal(d: Date, days: number) {
@@ -52,24 +56,37 @@ export async function POST(req: Request) {
     !Number.isFinite(body.priceCents) ||
     body.priceCents <= 0
   ) {
-    return NextResponse.json({ error: "Dati mancanti/non validi" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Dati mancanti/non validi" },
+      { status: 400 }
+    );
   }
 
   if (body.weekday < 1 || body.weekday > 7) {
-    return NextResponse.json({ error: "weekday deve essere 1..7 (lun..dom)" }, { status: 400 });
+    return NextResponse.json(
+      { error: "weekday deve essere 1..7 (lun..dom)" },
+      { status: 400 }
+    );
   }
 
   const st = parseHHMM(body.startTime);
   const et = parseHHMM(body.endTime);
+
   if (!st || !et) {
-    return NextResponse.json({ error: "Orario non valido (HH:MM multipli di 30)" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Orario non valido (HH:MM multipli di 30)" },
+      { status: 400 }
+    );
   }
 
-  const startDate = new Date(`${body.startDate}T00:00:00`);
-  const endDate = new Date(`${body.endDate}T00:00:00`);
+  const startDate = new Date(body.startDate + "T00:00:00");
+  const endDate = new Date(body.endDate + "T00:00:00");
 
   if (!(startDate <= endDate)) {
-    return NextResponse.json({ error: "startDate > endDate" }, { status: 400 });
+    return NextResponse.json(
+      { error: "startDate > endDate" },
+      { status: 400 }
+    );
   }
 
   const { data: sub, error: sErr } = await supabase
@@ -133,6 +150,7 @@ export async function POST(req: Request) {
     };
 
     const { error } = await supabase.from("bookings").insert(row);
+
     if (error) conflicts.push(row.start_ts);
     else created += 1;
 
