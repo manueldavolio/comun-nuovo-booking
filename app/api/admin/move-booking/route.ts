@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+type Body = {
+  bookingId: string;
+  resourceId: string;
+  startISO: string;
+  endISO: string;
+};
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json()) as Body;
 
-    const bookingId = body.bookingId;
-    const startISO = body.startISO;
-    const endISO = body.endISO;
-
-    if (!bookingId || !startISO || !endISO) {
+    if (!body.bookingId || !body.resourceId || !body.startISO || !body.endISO) {
       return NextResponse.json(
         { error: "Dati mancanti" },
         { status: 400 }
@@ -19,11 +22,11 @@ export async function POST(req: Request) {
     const { error } = await supabase
       .from("bookings")
       .update({
-        start_ts: startISO,
-        end_ts: endISO,
-        updated_at: new Date().toISOString(),
+        resource_id: body.resourceId,
+        start_ts: body.startISO,
+        end_ts: body.endISO,
       })
-      .eq("id", bookingId);
+      .eq("id", body.bookingId);
 
     if (error) {
       return NextResponse.json(
@@ -33,6 +36,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true });
+
   } catch (e: any) {
     return NextResponse.json(
       { error: e.message },
