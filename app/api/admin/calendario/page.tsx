@@ -65,21 +65,6 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function isoDateLocal(iso: string) {
-  const d = new Date(iso);
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function isoTimeLocal(iso: string) {
-  const d = new Date(iso);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mi}`;
-}
-
 export default function CalendarioAdmin() {
   const [date, setDate] = useState(todayISODate());
   const [resources, setResources] = useState<Resource[]>([]);
@@ -328,13 +313,6 @@ export default function CalendarioAdmin() {
   const [updateTotalAlso, setUpdateTotalAlso] = useState(true);
   const [detailErr, setDetailErr] = useState("");
 
-  const [editResourceId, setEditResourceId] = useState("");
-  const [editDate, setEditDate] = useState(todayISODate());
-  const [editStartTime, setEditStartTime] = useState("");
-  const [editMinutes, setEditMinutes] = useState(60);
-  const [editName, setEditName] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-
   function openDetail(b: Booking) {
     setDetailBooking(b);
     const baseCents = b.paid_amount_cents ?? b.total_amount_cents ?? null;
@@ -347,58 +325,7 @@ export default function CalendarioAdmin() {
     setPaymentNote(b.payment_note ?? "");
     setUpdateTotalAlso(true);
     setDetailErr("");
-
-    const start = new Date(b.start_ts);
-    const end = new Date(b.end_ts);
-    const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
-
-    setEditResourceId(b.resource_id);
-    setEditDate(isoDateLocal(b.start_ts));
-    setEditStartTime(isoTimeLocal(b.start_ts));
-    setEditMinutes(minutes);
-    setEditName(b.user_name || "");
-    setEditPhone(b.user_phone || "");
-
     setDetailOpen(true);
-  }
-
-  async function saveBookingChanges() {
-    if (!detailBooking) return;
-
-    setDetailErr("");
-
-    if (!editResourceId || !editDate || !editStartTime || !editName.trim() || !editPhone.trim()) {
-      setDetailErr("Compila tutti i campi");
-      return;
-    }
-
-    const startISO = new Date(`${editDate}T${editStartTime}:00`).toISOString();
-    const endISO = new Date(
-      new Date(`${editDate}T${editStartTime}:00`).getTime() + editMinutes * 60 * 1000
-    ).toISOString();
-
-    try {
-      const r = await fetch("/api/admin/update-booking", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookingId: detailBooking.id,
-          resourceId: editResourceId,
-          startISO,
-          endISO,
-          userName: editName,
-          userPhone: editPhone,
-        }),
-      });
-
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Errore modifica prenotazione");
-
-      setDetailOpen(false);
-      await load();
-    } catch (e: any) {
-      setDetailErr(e.message || "Errore modifica prenotazione");
-    }
   }
 
   async function markPaid() {
@@ -467,10 +394,6 @@ export default function CalendarioAdmin() {
   const [detailBlock, setDetailBlock] = useState<Block | null>(null);
   const [blockErr, setBlockErr] = useState("");
 
-  const [draggingBookingId, setDraggingBookingId] = useState<string | null>(null);
-  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
-  const [suppressOpenBookingId, setSuppressOpenBookingId] = useState<string | null>(null);
-
   function openBlockDetail(bl: Block) {
     setDetailBlock(bl);
     setBlockErr("");
@@ -499,6 +422,23 @@ export default function CalendarioAdmin() {
     }
   }
 
+  const [draggingBookingId, setDraggingBookingId] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [didMove, setDidMove] = useState(false);
+
+  useEffect(() => {
+    function stopDrag() {
+      setDraggingBookingId(null);
+      setDragOverKey(null);
+    }
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+    return () => {
+      window.removeEventListener("pointerup", stopDrag);
+      window.removeEventListener("pointercancel", stopDrag);
+    };
+  }, []);
+
   async function moveBooking(bookingId: string, resourceId: string, startT: number) {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) return;
@@ -524,9 +464,14 @@ export default function CalendarioAdmin() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore spostamento prenotazione");
 
+      setDidMove(true);
       await load();
     } catch (e: any) {
       setMsg(e.message || "Errore spostamento prenotazione");
+    } finally {
+      setDraggingBookingId(null);
+      setDragOverKey(null);
+      setTimeout(() => setDidMove(false), 150);
     }
   }
 
@@ -586,7 +531,7 @@ export default function CalendarioAdmin() {
         </div>
 
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 12 }}>
-          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Click su slot vuoto = inserisci prenotazione manuale o blocco campo.
+          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Tieni premuto su una prenotazione e trascinala su un altro slot.
         </div>
 
         {msg && (
@@ -611,6 +556,7 @@ export default function CalendarioAdmin() {
             overflowX: "auto",
             overflowY: "hidden",
             WebkitOverflowScrolling: "touch",
+            touchAction: "pan-x pan-y",
           }}
         >
           <div
@@ -632,7 +578,6 @@ export default function CalendarioAdmin() {
                 style={{
                   padding: 10,
                   fontWeight: 900,
-                  fontSize: 18,
                   borderRight: "1px solid #eee",
                   whiteSpace: "nowrap",
                 }}
@@ -681,28 +626,13 @@ export default function CalendarioAdmin() {
                           onClick={() => {
                             if (!draggingBookingId) openNewSlot(r.id, tr.t);
                           }}
-                          onDragOver={(e) => {
+                          onPointerEnter={() => {
                             if (!draggingBookingId) return;
-                            e.preventDefault();
                             setDragOverKey(slotKey);
                           }}
-                          onDragLeave={() => {
-                            if (dragOverKey === slotKey) setDragOverKey(null);
-                          }}
-                          onDrop={async (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-
+                          onPointerUp={() => {
                             if (!draggingBookingId) return;
-
-                            await moveBooking(draggingBookingId, r.id, tr.t);
-                            setSuppressOpenBookingId(draggingBookingId);
-                            setDraggingBookingId(null);
-                            setDragOverKey(null);
-
-                            setTimeout(() => {
-                              setSuppressOpenBookingId(null);
-                            }, 250);
+                            void moveBooking(draggingBookingId, r.id, tr.t);
                           }}
                           style={{
                             height: rowH,
@@ -728,34 +658,18 @@ export default function CalendarioAdmin() {
                       return (
                         <div
                           key={it.id}
-                          draggable={it.type === "BOOKING"}
-                          onDragStart={(e) => {
+                          onPointerDown={(e) => {
                             if (it.type !== "BOOKING") return;
-                            setDraggingBookingId(it.booking.id);
-                            e.dataTransfer.effectAllowed = "move";
-                            e.dataTransfer.setData("text/plain", it.booking.id);
-                          }}
-                          onDragEnd={() => {
-                            setDragOverKey(null);
-                            setTimeout(() => {
-                              setDraggingBookingId(null);
-                            }, 0);
-                          }}
-                          onMouseDown={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
+                            setDraggingBookingId(it.booking.id);
+                            setDragOverKey(null);
                           }}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
 
-                            if (
-                              suppressOpenBookingId &&
-                              it.type === "BOOKING" &&
-                              suppressOpenBookingId === it.booking.id
-                            ) {
-                              return;
-                            }
+                            if (didMove) return;
 
                             if (it.type === "BOOKING") {
                               openDetail(it.booking);
@@ -782,10 +696,13 @@ export default function CalendarioAdmin() {
                             padding: 10,
                             boxSizing: "border-box",
                             overflow: "hidden",
-                            cursor: "pointer",
+                            cursor: it.type === "BOOKING" ? "grab" : "pointer",
                             zIndex: 20,
                             pointerEvents: "auto",
                             opacity: draggingBookingId === it.id ? 0.55 : 1,
+                            touchAction: "none",
+                            userSelect: "none",
+                            WebkitUserSelect: "none",
                           }}
                         >
                           <div
@@ -1087,7 +1004,7 @@ export default function CalendarioAdmin() {
             <div
               onClick={(e) => e.stopPropagation()}
               style={{
-                width: 700,
+                width: 560,
                 maxWidth: "100%",
                 background: "white",
                 borderRadius: 16,
@@ -1097,90 +1014,13 @@ export default function CalendarioAdmin() {
             >
               <div style={{ fontSize: 18, fontWeight: 950 }}>Prenotazione</div>
 
-              <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
-                <label>
-                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Spazio</div>
-                  <select
-                    value={editResourceId}
-                    onChange={(e) => setEditResourceId(e.target.value)}
-                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
-                  >
-                    {orderedResources.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                  <label>
-                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Data</div>
-                    <input
-                      type="date"
-                      value={editDate}
-                      onChange={(e) => setEditDate(e.target.value)}
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
-                    />
-                  </label>
-
-                  <label>
-                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Ora inizio</div>
-                    <input
-                      type="time"
-                      value={editStartTime}
-                      onChange={(e) => setEditStartTime(e.target.value)}
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
-                    />
-                  </label>
-
-                  <label>
-                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Durata</div>
-                    <select
-                      value={editMinutes}
-                      onChange={(e) => setEditMinutes(Number(e.target.value))}
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
-                    >
-                      <option value={60}>1 ora</option>
-                      <option value={90}>1 ora e 30</option>
-                      <option value={120}>2 ore</option>
-                      <option value={180}>3 ore</option>
-                      <option value={240}>4 ore</option>
-                      <option value={300}>5 ore</option>
-                      <option value={360}>6 ore</option>
-                      <option value={420}>7 ore</option>
-                      <option value={480}>8 ore</option>
-                      <option value={540}>9 ore</option>
-                      <option value={600}>10 ore</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <label>
-                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Nome</div>
-                    <input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
-                    />
-                  </label>
-
-                  <label>
-                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Telefono</div>
-                    <input
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value)}
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
-                    />
-                  </label>
-                </div>
-
-                <div style={{ display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
-                  <div><b>Totale:</b> {eurFromCents(detailBooking.total_amount_cents ?? null)}</div>
-                  <div><b>Stato pagamento:</b> {detailBooking.paid_at ? "Pagata" : "Da pagare"}</div>
-                  {detailBooking.payment_note ? <div><b>Nota:</b> {detailBooking.payment_note}</div> : null}
-                </div>
+              <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
+                <div><b>Nome:</b> {detailBooking.user_name}</div>
+                <div><b>Telefono:</b> {detailBooking.user_phone}</div>
+                <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}–{hhmm(detailBooking.end_ts)} • {date}</div>
+                <div><b>Totale:</b> {eurFromCents(detailBooking.total_amount_cents ?? null)}</div>
+                <div><b>Stato pagamento:</b> {detailBooking.paid_at ? "Pagata" : "Da pagare"}</div>
+                {detailBooking.payment_note ? <div><b>Nota:</b> {detailBooking.payment_note}</div> : null}
               </div>
 
               <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
@@ -1260,19 +1100,6 @@ export default function CalendarioAdmin() {
                   </button>
 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button
-                      onClick={saveBookingChanges}
-                      style={{
-                        padding: "10px 14px",
-                        borderRadius: 12,
-                        border: "1px solid #111",
-                        background: "white",
-                        fontWeight: 950,
-                      }}
-                    >
-                      Salva modifiche
-                    </button>
-
                     <a
                       href={`/admin/ricevuta/${detailBooking.id}`}
                       target="_blank"
