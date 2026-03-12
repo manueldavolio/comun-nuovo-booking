@@ -427,17 +427,20 @@ export default function CalendarioAdmin() {
   const [didMove, setDidMove] = useState(false);
 
   useEffect(() => {
-    function stopDrag() {
+  function stopDrag() {
+    setTimeout(() => {
       setDraggingBookingId(null);
       setDragOverKey(null);
-    }
-    window.addEventListener("pointerup", stopDrag);
-    window.addEventListener("pointercancel", stopDrag);
-    return () => {
-      window.removeEventListener("pointerup", stopDrag);
-      window.removeEventListener("pointercancel", stopDrag);
-    };
-  }, []);
+    }, 80);
+  }
+
+  window.addEventListener("pointercancel", stopDrag);
+
+  return () => {
+    window.removeEventListener("pointercancel", stopDrag);
+  };
+}, []);
+
 
   async function moveBooking(bookingId: string, resourceId: string, startT: number) {
     const booking = bookings.find((b) => b.id === bookingId);
@@ -630,10 +633,13 @@ export default function CalendarioAdmin() {
                             if (!draggingBookingId) return;
                             setDragOverKey(slotKey);
                           }}
-                          onPointerUp={() => {
-                            if (!draggingBookingId) return;
-                            void moveBooking(draggingBookingId, r.id, tr.t);
-                          }}
+                          onPointerUp={(e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!draggingBookingId) return;
+  void moveBooking(draggingBookingId, r.id, tr.t);
+}}
+
                           style={{
                             height: rowH,
                             borderBottom: "1px solid #f6f6f6",
