@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: Request) {
   try {
-    const id = params.id;
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
 
     if (!id) {
       return NextResponse.json(
@@ -17,22 +15,37 @@ export async function GET(
 
     const { data, error } = await supabase
       .from("bookings")
-      .select("*")
+      .select(`
+        id,
+        user_name,
+        user_phone,
+        start_ts,
+        end_ts,
+        total_amount_cents,
+        paid_amount_cents,
+        paid_method,
+        paid_at,
+        status,
+        resources (
+          name
+        )
+      `)
       .eq("id", id)
       .single();
 
-    if (error) {
+    if (error || !data) {
       return NextResponse.json(
         { error: "Prenotazione non trovata" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(data);
-
+    return NextResponse.json({
+      booking: data,
+    });
   } catch (e: any) {
     return NextResponse.json(
-      { error: e.message },
+      { error: e.message || "Errore get-booking" },
       { status: 500 }
     );
   }
