@@ -13,7 +13,6 @@ type Booking = {
   paid_method: string | null;
   paid_at: string | null;
   status: string | null;
-  resource_name?: string | null;
   resources?: { name?: string | null } | Array<{ name?: string | null }> | null;
 };
 
@@ -41,12 +40,11 @@ function ddmmyyhhmm(iso?: string | null) {
   });
 }
 
-export default function RicevutaPage({ params }: any) {
+export default function RicevutaPage({ params }: { params: { id: string } }) {
   const id = params.id;
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
-
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -55,39 +53,13 @@ export default function RicevutaPage({ params }: any) {
       setLoading(true);
 
       const r = await fetch(`/api/admin/get-booking?id=${id}`);
-      const text = await r.text();
-
-      let j: any;
-      try {
-        j = JSON.parse(text);
-      } catch {
-        throw new Error("La route get-booking non sta restituendo JSON");
-      }
+      const j = await r.json();
 
       if (!r.ok) {
         throw new Error(j.error || "Errore caricamento ricevuta");
       }
 
-      const b = j.booking;
-
-      const resourceName = Array.isArray(b.resources)
-        ? b.resources?.[0]?.name ?? null
-        : b.resources?.name ?? b.resource_name ?? null;
-
-      setBooking({
-        id: b.id,
-        user_name: b.user_name,
-        user_phone: b.user_phone,
-        start_ts: b.start_ts,
-        end_ts: b.end_ts,
-        total_amount_cents: b.total_amount_cents,
-        paid_amount_cents: b.paid_amount_cents,
-        paid_method: b.paid_method,
-        paid_at: b.paid_at,
-        status: b.status,
-        resource_name: resourceName || "Spazio",
-        resources: b.resources ?? null,
-      });
+      setBooking(j.booking ?? null);
     } catch (e: any) {
       alert(e.message || "Errore caricamento ricevuta");
     } finally {
@@ -119,14 +91,7 @@ export default function RicevutaPage({ params }: any) {
         }),
       });
 
-      const text = await r.text();
-
-      let j: any;
-      try {
-        j = JSON.parse(text);
-      } catch {
-        throw new Error("La route send-receipt non sta restituendo JSON");
-      }
+      const j = await r.json();
 
       if (!r.ok) {
         throw new Error(j.error || "Errore invio");
@@ -148,6 +113,10 @@ export default function RicevutaPage({ params }: any) {
   if (!booking) {
     return <div style={{ padding: 30 }}>Prenotazione non trovata</div>;
   }
+
+  const resourceName = Array.isArray(booking.resources)
+    ? booking.resources?.[0]?.name ?? "Spazio"
+    : booking.resources?.name ?? "Spazio";
 
   const receiptNumber = `N° ${String(booking.id).slice(0, 8).toUpperCase()}`;
 
@@ -303,7 +272,7 @@ export default function RicevutaPage({ params }: any) {
               </div>
               <div style={{ lineHeight: 1.9 }}>
                 <div>
-                  <b>Spazio:</b> {booking.resource_name || "Spazio"}
+                  <b>Spazio:</b> {resourceName}
                 </div>
                 <div>
                   <b>Orario:</b> {hhmm(booking.start_ts)}-{hhmm(booking.end_ts)}
