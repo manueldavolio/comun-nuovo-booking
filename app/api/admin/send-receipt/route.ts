@@ -45,6 +45,31 @@ export async function POST(req: Request) {
       );
     }
 
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RECEIPT_FROM_EMAIL;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+    if (!resendApiKey) {
+      return NextResponse.json(
+        { error: "Manca RESEND_API_KEY su Vercel" },
+        { status: 500 }
+      );
+    }
+
+    if (!fromEmail) {
+      return NextResponse.json(
+        { error: "Manca RECEIPT_FROM_EMAIL su Vercel" },
+        { status: 500 }
+      );
+    }
+
+    if (!siteUrl) {
+      return NextResponse.json(
+        { error: "Manca NEXT_PUBLIC_SITE_URL su Vercel" },
+        { status: 500 }
+      );
+    }
+
     const { data: booking, error } = await supabase
       .from("bookings")
       .select(`
@@ -69,31 +94,6 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Prenotazione non trovata" },
         { status: 404 }
-      );
-    }
-
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const fromEmail = process.env.RECEIPT_FROM_EMAIL;
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-
-    if (!resendApiKey) {
-      return NextResponse.json(
-        { error: "Manca RESEND_API_KEY su Vercel" },
-        { status: 500 }
-      );
-    }
-
-    if (!fromEmail) {
-      return NextResponse.json(
-        { error: "Manca RECEIPT_FROM_EMAIL su Vercel" },
-        { status: 500 }
-      );
-    }
-
-    if (!siteUrl) {
-      return NextResponse.json(
-        { error: "Manca NEXT_PUBLIC_SITE_URL su Vercel" },
-        { status: 500 }
       );
     }
 
@@ -147,7 +147,11 @@ export async function POST(req: Request) {
           </tr>
           <tr>
             <td style="padding: 8px; border: 1px solid #ddd;"><b>Data pagamento</b></td>
-            <td style="padding: 8px; border: 1px solid #ddd;">${booking.paid_at ? `${fmtDate(booking.paid_at)} ${fmtTime(booking.paid_at)}` : "-"}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">${
+              booking.paid_at
+                ? `${fmtDate(booking.paid_at)} ${fmtTime(booking.paid_at)}`
+                : "-"
+            }</td>
           </tr>
           <tr>
             <td style="padding: 8px; border: 1px solid #ddd;"><b>Nota</b></td>
