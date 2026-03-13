@@ -13,9 +13,7 @@ type Booking = {
   paid_method: string | null;
   paid_at: string | null;
   status: string | null;
-  resources?: {
-    name?: string | null;
-  } | null;
+  resource_name?: string | null;
 };
 
 function eur(c?: number | null) {
@@ -52,14 +50,31 @@ export default function RicevutaPage({ params }: { params: { id: string } }) {
   async function load() {
     try {
       setLoading(true);
+
       const r = await fetch(`/api/admin/get-booking?id=${params.id}`);
       const j = await r.json();
 
-      if (!r.ok) {
-        throw new Error(j.error || "Errore caricamento ricevuta");
-      }
+      if (!r.ok) throw new Error(j.error || "Errore caricamento ricevuta");
 
-      setBooking(j.booking ?? null);
+      const b = j.booking;
+
+      setBooking({
+        id: b.id,
+        user_name: b.user_name,
+        user_phone: b.user_phone,
+        start_ts: b.start_ts,
+        end_ts: b.end_ts,
+        total_amount_cents: b.total_amount_cents,
+        paid_amount_cents: b.paid_amount_cents,
+        paid_method: b.paid_method,
+        paid_at: b.paid_at,
+        status: b.status,
+        resource_name:
+          b.resource_name ||
+          b.resources?.name ||
+          (Array.isArray(b.resources) ? b.resources?.[0]?.name : null) ||
+          "Spazio",
+      });
     } catch (e: any) {
       alert(e.message || "Errore caricamento ricevuta");
     } finally {
@@ -93,9 +108,7 @@ export default function RicevutaPage({ params }: { params: { id: string } }) {
 
       const j = await r.json();
 
-      if (!r.ok) {
-        throw new Error(j.error || "Errore invio");
-      }
+      if (!r.ok) throw new Error(j.error || "Errore invio");
 
       alert("Ricevuta inviata ✅");
       setEmail("");
@@ -114,7 +127,6 @@ export default function RicevutaPage({ params }: { params: { id: string } }) {
     return <div style={{ padding: 30 }}>Prenotazione non trovata</div>;
   }
 
-  const resourceName = booking.resources?.name || "Spazio";
   const receiptNumber = `N° ${String(booking.id).slice(0, 8).toUpperCase()}`;
 
   return (
@@ -268,7 +280,7 @@ export default function RicevutaPage({ params }: { params: { id: string } }) {
               </div>
               <div style={{ lineHeight: 1.9 }}>
                 <div>
-                  <b>Spazio:</b> {resourceName}
+                  <b>Spazio:</b> {booking.resource_name || "Spazio"}
                 </div>
                 <div>
                   <b>Orario:</b> {hhmm(booking.start_ts)}-{hhmm(booking.end_ts)}

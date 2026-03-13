@@ -10,7 +10,10 @@ export async function POST(req: Request) {
     const { bookingId, email } = body;
 
     if (!bookingId || !email) {
-      return NextResponse.json({ error: "bookingId o email mancanti" }, { status: 400 });
+      return NextResponse.json(
+        { error: "bookingId o email mancanti" },
+        { status: 400 }
+      );
     }
 
     const { data: booking } = await supabase
@@ -20,10 +23,13 @@ export async function POST(req: Request) {
       .single();
 
     if (!booking) {
-      return NextResponse.json({ error: "Prenotazione non trovata" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Prenotazione non trovata" },
+        { status: 404 }
+      );
     }
 
-    const receiptUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/admin/ricevuta/${bookingId}`;
+    const receiptUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/admin/ricevuta/${bookingId}`;
 
     await resend.emails.send({
       from: "Comun Nuovo <onboarding@resend.dev>",
@@ -33,15 +39,21 @@ export async function POST(req: Request) {
         <h2>Ricevuta prenotazione</h2>
         <p><b>Nome:</b> ${booking.user_name}</p>
         <p><b>Telefono:</b> ${booking.user_phone}</p>
-        <p><b>Orario:</b> ${booking.start_ts} → ${booking.end_ts}</p>
+        <p><b>Orario:</b> ${booking.start_ts} - ${booking.end_ts}</p>
         <p><b>Totale:</b> ${(booking.total_amount_cents / 100).toFixed(2)} €</p>
-        <br/>
-        <a href="${receiptUrl}">Apri ricevuta</a>
+        <p>
+          <a href="${receiptUrl}">
+            Apri ricevuta
+          </a>
+        </p>
       `,
     });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json(
+      { error: e.message || "Errore invio ricevuta" },
+      { status: 500 }
+    );
   }
 }
