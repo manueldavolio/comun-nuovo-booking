@@ -2,33 +2,34 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
 type Body = {
+  bookingId: string;
   resourceId: string;
   startISO: string;
   endISO: string;
-  minutes?: number;
-  userName: string;
-  userPhone: string;
-  payMode?: string;
-  sport?: string | null;
+  sport?: "CALCETTO" | "TENNIS" | null;
 };
 
-function calcAmountCents(resourceId: string, minutes: number, sport?: string | null) {
-  const hours = minutes / 60;
+const PRICE_PER_HOUR_CENTS: Record<string, number> = {
+  Palazzetto: 6000,
+  Tendone: 5000,
+  Sintetico: 5000,
+};
 
-  // Tendone: calcetto 50€/h, tennis 15€/h
-  // Nota: qui non conosciamo il nome della risorsa, quindi usiamo sport come discriminante.
-  if (sport === "calcetto") return Math.round(hours * 50 * 100);
-  if (sport === "tennis") return Math.round(hours * 15 * 100);
+function calcTotalCents(resourceName: string, minutes: number, sport?: string | null) {
+  if (resourceName === "Tendone") {
+    if (sport === "TENNIS") return Math.round(1500 * (minutes / 60));
+    return Math.round(5000 * (minutes / 60));
+  }
 
-  // fallback base
-  return 0;
+  const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
+  return Math.round(perHour * (minutes / 60));
 }
 
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
 
-    if (!body.resourceId || !body.startISO || !body.endISO || !body.userName) {
+    if (!body.bookingId || !body.resourceId || !body.startISO || !body.endISO) {
       return NextResponse.json({ error: "Dati mancanti" }, { status: 400 });
     }
 
@@ -40,38 +41,70 @@ export async function POST(req: Request) {
     }
 
     const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
-    const totalAmountCents = calcAmountCents(body.resourceId, minutes, body.sport ?? null);
+
+    const { data: resRow, error: rErr } = await supabase
+      .from("resources")
+      .select("id, name, is_active")
+      .eq("id", body.resourceId)
+      .single();
+
+    if (rErr || !resRow) {
+      return NextResponse.json({ error: "Risorsa non trovata" }, { status: 404 });
+    }
+
+    if (!resRow.is_active) {
+      return NextResponse.json({ error: "Risorsa non attiva" }, { status: 400 });
+    }
+
+    const normalizedSport =
+      resRow.name === "Tendone"
+        ? body.sport === "TENNIS"
+          ? "TENNIS"
+          : "CALCETTO"
+        : null;
+
+    const totalCents = calcTotalCents(resRow.name, minutes, normalizedSport);
+
+    const paymentNote =
+      normalizedSport != null
+        ? `SPORT:${normalizedSport}`
+        : null;
+
+    const updatePayload: Record<string, any> = {
+      resource_id: body.resourceId,
+      start_ts: start.toISOString(),
+      end_ts: end.toISOString(),
+      total_amount_cents: totalCents,
+      payment_note: paymentNote,
+    };
+
+    // Se hai la colonna sport, la salva anche lì
+    updatePayload.sport = normalizedSport;
 
     const { data, error } = await supabase
       .from("bookings")
-      .insert({
-        resource_id: body.resourceId,
-        user_name: body.userName,
-        user_phone: body.userPhone || "",
-        start_ts: start.toISOString(),
-        end_ts: end.toISOString(),
-        status: "CONFIRMED",
-        pay_mode: body.payMode || "BAR",
-        total_amount_cents: totalAmountCents,
-        paid_amount_cents: null,
-        paid_method: null,
-        paid_at: null,
-        payment_note: null,
-        sport: body.sport ?? null,
-      })
+      .update(updatePayload)
+      .eq("id", body.bookingId)
       .select("*")
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(
+        { error: error.message || "Errore spostamento prenotazione" },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ ok: true, booking: data });
+    return NextResponse.json({
+      ok: true,
+      booking: data,
+      totalCents,
+      sport: normalizedSport,
+    });
   } catch (e: any) {
     return NextResponse.json(
-      { error: e.message || "Errore creazione prenotazione" },
+      { error: e.message || "Errore spostamento prenotazione" },
       { status: 500 }
     );
   }
 }
-
