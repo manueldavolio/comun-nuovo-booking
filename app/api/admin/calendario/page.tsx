@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Resource = {
   id: string;
@@ -33,12 +33,49 @@ type Block = {
   note?: string | null;
 };
 
+type WeekDaySummary = {
+  date: string;
+  label: string;
+  bookingsCount: number;
+  paidCount: number;
+  unpaidCount: number;
+  totalCents: number;
+};
+
 function todayISODate() {
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDaysISO(iso: string, days: number) {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function startOfWeekISO(iso: string) {
+  const d = new Date(`${iso}T00:00:00`);
+  const day = d.getDay(); // 0 dom - 6 sab
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function italianWeekdayShort(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("it-IT", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });
 }
 
 function hhmm(iso: string) {
@@ -65,6 +102,15 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function pricePreview(resourceName: string, sport: string, minutes: number) {
+  if (resourceName === "Tendone") {
+    const perHour = sport === "TENNIS" ? 1500 : 5000;
+    return Math.round(perHour * (minutes / 60));
+  }
+  if (resourceName === "Palazzetto") return Math.round(6000 * (minutes / 60));
+  return Math.round(5000 * (minutes / 60));
+}
+
 export default function CalendarioAdmin() {
   const [date, setDate] = useState(todayISODate());
   const [resources, setResources] = useState<Resource[]>([]);
@@ -72,13 +118,23 @@ export default function CalendarioAdmin() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+  const [viewMode, setViewMode] = useState<"day" | "week">("day");
+  const [weekSummary, setWeekSummary] = useState<WeekDaySummary[]>([]);
+  const [zoom, setZoom] = useState(1);
+
+  const pinchStartDistance = useRef<number | null>(null);
+  const pinchStartZoom = useRef<number>(1);
 
   const STEP_MIN = 30;
   const { openH, openM, closeH, closeM } = getSchedule(date);
 
-  const timeColW = 78;
-  const colW = 260;
-  const rowH = 46;
+  const baseTimeColW = 64;
+  const baseColW = 220;
+  const baseRowH = 52;
+
+  const timeColW = Math.round(baseTimeColW * zoom);
+  const colW = Math.round(baseColW * zoom);
+  const rowH = Math.round(baseRowH * zoom);
 
   const resourceOrder = ["Palazzetto", "Tendone", "Saletta palestra", "Spogliatoi"];
 
@@ -90,18 +146,9 @@ export default function CalendarioAdmin() {
     });
   }, [resources]);
 
-  const dayBase = useMemo(
-    () => new Date(`${date}T00:00:00.000Z`).getTime(),
-    [date]
-  );
-  const dayStart = useMemo(
-    () => dayBase + (openH * 60 + openM) * 60 * 1000,
-    [dayBase, openH, openM]
-  );
-  const dayEnd = useMemo(
-    () => dayBase + (closeH * 60 + closeM) * 60 * 1000,
-    [dayBase, closeH, closeM]
-  );
+  const dayBase = useMemo(() => new Date(`${date}T00:00:00.000Z`).getTime(), [date]);
+  const dayStart = useMemo(() => dayBase + (openH * 60 + openM) * 60 * 1000, [dayBase, openH, openM]);
+  const dayEnd = useMemo(() => dayBase + (closeH * 60 + closeM) * 60 * 1000, [dayBase, closeH, closeM]);
 
   const timeRows = useMemo(() => {
     const rows: { label: string; t: number }[] = [];
@@ -126,7 +173,6 @@ export default function CalendarioAdmin() {
       const r = await fetch(`/api/admin/day?date=${encodeURIComponent(date)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore caricamento");
-
       setResources((j.resources ?? []).filter((x: any) => x.is_active));
       setBookings(j.bookings ?? []);
       setBlocks(j.blocks ?? []);
@@ -137,8 +183,38 @@ export default function CalendarioAdmin() {
     }
   }
 
+  async function loadWeekSummary(currentDate: string) {
+    try {
+      const monday = startOfWeekISO(currentDate);
+      const dates = Array.from({ length: 7 }, (_, i) => addDaysISO(monday, i));
+      const results = await Promise.all(
+        dates.map(async (d) => {
+          const r = await fetch(`/api/admin/day?date=${encodeURIComponent(d)}`);
+          const j = await r.json();
+          const dayBookings: Booking[] = j.bookings ?? [];
+          const totalCents = dayBookings.reduce(
+            (sum, b) => sum + (b.paid_amount_cents ?? b.total_amount_cents ?? 0),
+            0
+          );
+          return {
+            date: d,
+            label: italianWeekdayShort(d),
+            bookingsCount: dayBookings.length,
+            paidCount: dayBookings.filter((b) => !!b.paid_at).length,
+            unpaidCount: dayBookings.filter((b) => !b.paid_at).length,
+            totalCents,
+          } as WeekDaySummary;
+        })
+      );
+      setWeekSummary(results);
+    } catch {
+      setWeekSummary([]);
+    }
+  }
+
   useEffect(() => {
     load();
+    loadWeekSummary(date);
   }, [date]);
 
   const items = useMemo(() => {
@@ -153,6 +229,7 @@ export default function CalendarioAdmin() {
           subtitle: string;
           badge: string;
           booking: Booking;
+          sport: "CALCETTO" | "TENNIS" | null;
         }
       | {
           type: "BLOCK";
@@ -169,6 +246,13 @@ export default function CalendarioAdmin() {
 
     for (const b of bookings) {
       const paid = !!b.paid_at;
+      const note = (b.payment_note || "").toUpperCase();
+      const sport = note.includes("TENNIS")
+        ? "TENNIS"
+        : note.includes("CALCETTO")
+        ? "CALCETTO"
+        : null;
+
       out.push({
         type: "BOOKING",
         id: b.id,
@@ -176,9 +260,10 @@ export default function CalendarioAdmin() {
         start: new Date(b.start_ts).getTime(),
         end: new Date(b.end_ts).getTime(),
         title: b.user_name || "Prenotazione",
-        subtitle: `${hhmm(b.start_ts)}–${hhmm(b.end_ts)} • ${b.user_phone ?? ""}`,
+        subtitle: `${hhmm(b.start_ts)}-${hhmm(b.end_ts)} • ${b.user_phone ?? ""}`,
         badge: paid ? "Pagata" : "Da pagare",
         booking: b,
+        sport,
       });
     }
 
@@ -190,7 +275,7 @@ export default function CalendarioAdmin() {
         start: new Date(bl.start_ts).getTime(),
         end: new Date(bl.end_ts).getTime(),
         title: "Bloccato",
-        subtitle: `${hhmm(bl.start_ts)}–${hhmm(bl.end_ts)}${bl.note ? ` • ${bl.note}` : ""}`,
+        subtitle: `${hhmm(bl.start_ts)}-${hhmm(bl.end_ts)}${bl.note ? ` • ${bl.note}` : ""}`,
         badge: "Blocco",
         block: bl,
       });
@@ -207,9 +292,7 @@ export default function CalendarioAdmin() {
       arr.push(it);
       map.set(it.resource_id, arr);
     }
-    for (const [, arr] of map.entries()) {
-      arr.sort((a, b) => a.start - b.start);
-    }
+    for (const [, arr] of map.entries()) arr.sort((a, b) => a.start - b.start);
     return map;
   }, [orderedResources, items]);
 
@@ -230,6 +313,7 @@ export default function CalendarioAdmin() {
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newErr, setNewErr] = useState("");
+  const [newSport, setNewSport] = useState<"CALCETTO" | "TENNIS">("CALCETTO");
 
   function openNewSlot(resourceId: string, startT: number) {
     setNewResourceId(resourceId);
@@ -238,6 +322,7 @@ export default function CalendarioAdmin() {
     setNewName("");
     setNewPhone("");
     setNewErr("");
+    setNewSport("CALCETTO");
     setNewOpen(true);
   }
 
@@ -259,6 +344,8 @@ export default function CalendarioAdmin() {
           userName: newName,
           userPhone: newPhone,
           payMode: "BAR",
+          // NOTE: per salvare davvero lo sport/prezzo lato backend
+          // servono modifiche anche alla route create-booking.
         }),
       });
 
@@ -275,9 +362,7 @@ export default function CalendarioAdmin() {
   async function createBlock() {
     setNewErr("");
     try {
-      const reason = prompt(
-        "Motivo blocco campo (es. Allenamento, Manutenzione, Evento)"
-      );
+      const reason = prompt("Motivo blocco campo (es. Allenamento, Manutenzione, Evento)");
       if (!reason) return;
 
       const endISO = new Date(
@@ -312,6 +397,11 @@ export default function CalendarioAdmin() {
   const [paymentNote, setPaymentNote] = useState("");
   const [updateTotalAlso, setUpdateTotalAlso] = useState(true);
   const [detailErr, setDetailErr] = useState("");
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveBookingState, setMoveBookingState] = useState<Booking | null>(null);
+  const [moveResource, setMoveResource] = useState("");
+  const [moveTime, setMoveTime] = useState("");
+  const [moveErr, setMoveErr] = useState("");
 
   function openDetail(b: Booking) {
     setDetailBooking(b);
@@ -326,6 +416,46 @@ export default function CalendarioAdmin() {
     setUpdateTotalAlso(true);
     setDetailErr("");
     setDetailOpen(true);
+  }
+
+  function openMove(b: Booking) {
+    setMoveBookingState(b);
+    setMoveResource(b.resource_id);
+    setMoveTime(b.start_ts);
+    setMoveErr("");
+    setMoveOpen(true);
+  }
+
+  async function confirmMove() {
+    if (!moveBookingState) return;
+
+    try {
+      const duration =
+        new Date(moveBookingState.end_ts).getTime() -
+        new Date(moveBookingState.start_ts).getTime();
+
+      const startISO = new Date(moveTime).toISOString();
+      const endISO = new Date(new Date(moveTime).getTime() + duration).toISOString();
+
+      const r = await fetch("/api/admin/move-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: moveBookingState.id,
+          resourceId: moveResource,
+          startISO,
+          endISO,
+        }),
+      });
+
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Errore spostamento");
+
+      setMoveOpen(false);
+      await load();
+    } catch (e: any) {
+      setMoveErr(e.message || "Errore spostamento");
+    }
   }
 
   async function markPaid() {
@@ -483,23 +613,119 @@ export default function CalendarioAdmin() {
 
   const minWidth = timeColW + orderedResources.length * colW;
 
-  return (
-    <div style={{ padding: 16 }}>
-      <div style={{ maxWidth: 1700, margin: "0 auto" }}>
-        <img src="/logo.png" style={{ height: 80, marginBottom: 20 }} />
+  function handleTouchStartPinch(e: React.TouchEvent<HTMLDivElement>) {
+    if (e.touches.length !== 2) return;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchStartDistance.current = Math.hypot(dx, dy);
+    pinchStartZoom.current = zoom;
+  }
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: 26, fontWeight: 900, marginRight: 12 }}>Calendario</h1>
+  function handleTouchMovePinch(e: React.TouchEvent<HTMLDivElement>) {
+    if (e.touches.length !== 2 || pinchStartDistance.current == null) return;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const currentDistance = Math.hypot(dx, dy);
+    const ratio = currentDistance / pinchStartDistance.current;
+    const next = clamp(pinchStartZoom.current * ratio, 0.8, 1.5);
+    setZoom(Number(next.toFixed(2)));
+  }
+
+  function handleTouchEndPinch() {
+    pinchStartDistance.current = null;
+  }
+
+  const selectedNewResource = resources.find((r) => r.id === newResourceId);
+
+  return (
+    <div style={{ padding: 12, background: "#f3f4f6", minHeight: "100vh" }}>
+      <div style={{ maxWidth: 1700, margin: "0 auto" }}>
+        <img src="/logo.png" style={{ height: 64, marginBottom: 12 }} />
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <h1 style={{ fontSize: 22, fontWeight: 900, marginRight: 10 }}>Calendario</h1>
 
           <label>
-            <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Data</div>
+            <div style={{ fontWeight: 800, fontSize: 11, opacity: 0.7 }}>Data</div>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+              style={{
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #d1d5db",
+                background: "white",
+              }}
             />
           </label>
+
+          <button
+            onClick={() => setViewMode("day")}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid #d1d5db",
+              background: viewMode === "day" ? "#111" : "white",
+              color: viewMode === "day" ? "white" : "#111",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            Giorno
+          </button>
+
+          <button
+            onClick={() => setViewMode("week")}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid #d1d5db",
+              background: viewMode === "week" ? "#111" : "white",
+              color: viewMode === "week" ? "white" : "#111",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            Settimana
+          </button>
+
+          <button
+            onClick={() => setZoom((z) => Number(clamp(z - 0.1, 0.8, 1.5).toFixed(2)))}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #d1d5db",
+              background: "white",
+              fontWeight: 900,
+            }}
+          >
+            -
+          </button>
+
+          <div style={{ fontSize: 12, fontWeight: 800, minWidth: 52, textAlign: "center" }}>
+            {Math.round(zoom * 100)}%
+          </div>
+
+          <button
+            onClick={() => setZoom((z) => Number(clamp(z + 0.1, 0.8, 1.5).toFixed(2)))}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #d1d5db",
+              background: "white",
+              fontWeight: 900,
+            }}
+          >
+            +
+          </button>
 
           <button
             onClick={load}
@@ -517,21 +743,21 @@ export default function CalendarioAdmin() {
             Aggiorna
           </button>
 
-          <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e9ecef", fontWeight: 800 }}>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e5e7eb", fontWeight: 800, fontSize: 13 }}>
               ✅ Prenotato
             </span>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#d9f5d9", fontWeight: 800 }}>
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#d9f5d9", fontWeight: 800, fontSize: 13 }}>
               💶 Pagata
             </span>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ffe8cc", fontWeight: 800 }}>
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ffe8cc", fontWeight: 800, fontSize: 13 }}>
               ⛔ Blocco
             </span>
           </div>
         </div>
 
-        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 12 }}>
-          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Tieni premuto su una prenotazione e trascinala su un altro slot.
+        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 11 }}>
+          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} - {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Tieni premuto su una prenotazione e trascinala su un altro slot. • Pinch sul calendario per zoom.
         </div>
 
         {msg && (
@@ -548,214 +774,282 @@ export default function CalendarioAdmin() {
           </div>
         )}
 
-        <div
-          style={{
-            marginTop: 14,
-            border: "1px solid #eee",
-            borderRadius: 14,
-            overflowX: "auto",
-            overflowY: "hidden",
-            WebkitOverflowScrolling: "touch",
-            touchAction: "pan-x pan-y",
-          }}
-        >
+        {viewMode === "week" ? (
           <div
             style={{
+              marginTop: 14,
               display: "grid",
-              gridTemplateColumns: `${timeColW}px repeat(${orderedResources.length}, ${colW}px)`,
-              position: "sticky",
-              top: 0,
-              zIndex: 5,
-              background: "#fafafa",
-              borderBottom: "1px solid #eee",
-              minWidth: minWidth,
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 12,
             }}
           >
-            <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #eee" }} />
-            {orderedResources.map((r) => (
-              <div
-                key={r.id}
+            {weekSummary.map((d) => (
+              <button
+                key={d.date}
+                onClick={() => {
+                  setDate(d.date);
+                  setViewMode("day");
+                }}
                 style={{
-                  padding: 10,
-                  fontWeight: 900,
-                  borderRight: "1px solid #eee",
-                  whiteSpace: "nowrap",
+                  textAlign: "left",
+                  background: "white",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 16,
+                  padding: 14,
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+                  cursor: "pointer",
                 }}
               >
-                {r.name}
-              </div>
+                <div style={{ fontSize: 16, fontWeight: 900 }}>{d.label}</div>
+                <div style={{ marginTop: 8, fontSize: 13 }}>Prenotazioni: <b>{d.bookingsCount}</b></div>
+                <div style={{ marginTop: 4, fontSize: 13 }}>Pagate: <b>{d.paidCount}</b></div>
+                <div style={{ marginTop: 4, fontSize: 13 }}>Da pagare: <b>{d.unpaidCount}</b></div>
+                <div style={{ marginTop: 8, fontSize: 14, fontWeight: 900 }}>
+                  Incassato: {eurFromCents(d.totalCents)}
+                </div>
+              </button>
             ))}
           </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
-            <div style={{ borderRight: "1px solid #eee" }}>
-              {timeRows.map((t, i) => (
+        ) : (
+          <div
+            onTouchStart={handleTouchStartPinch}
+            onTouchMove={handleTouchMovePinch}
+            onTouchEnd={handleTouchEndPinch}
+            style={{
+              marginTop: 14,
+              border: "1px solid #d1d5db",
+              borderRadius: 16,
+              overflowX: "auto",
+              overflowY: "hidden",
+              WebkitOverflowScrolling: "touch",
+              touchAction: "pan-x pan-y",
+              background: "white",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `${timeColW}px repeat(${orderedResources.length}, ${colW}px)`,
+                position: "sticky",
+                top: 0,
+                zIndex: 5,
+                background: "#e5e7eb",
+                borderBottom: "1px solid #cbd5e1",
+                minWidth: minWidth,
+              }}
+            >
+              <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #cbd5e1" }} />
+              {orderedResources.map((r) => (
                 <div
-                  key={i}
+                  key={r.id}
                   style={{
-                    height: rowH,
-                    padding: "12px 8px",
-                    fontSize: 12,
+                    padding: 10,
                     fontWeight: 900,
-                    opacity: 0.7,
+                    borderRight: "1px solid #cbd5e1",
+                    whiteSpace: "nowrap",
+                    fontSize: 14,
                   }}
                 >
-                  {t.label}
+                  {r.name}
                 </div>
               ))}
             </div>
 
-            <div style={{ position: "relative" }}>
-              <div style={{ display: "grid", gridTemplateColumns: `repeat(${orderedResources.length}, ${colW}px)` }}>
-                {orderedResources.map((r) => (
-                  <div
-                    key={r.id}
-                    style={{
-                      position: "relative",
-                      height: gridH,
-                      borderRight: "1px solid #f0f0f0",
-                    }}
-                  >
-                    {timeRows.map((tr, idx) => {
-                      const slotKey = `${r.id}-${tr.t}`;
-                      const isDragOver = dragOverKey === slotKey;
+            <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
+              <div style={{ borderRight: "1px solid #cbd5e1", background: "#f3f4f6" }}>
+                {timeRows.map((t, i) => {
+                  const minutes = new Date(t.t).getMinutes();
+                  const isFullHour = minutes === 0;
+                  const hourBand = Math.floor(i / 2) % 2 === 0;
 
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => {
-                            if (!draggingBookingId) openNewSlot(r.id, tr.t);
-                          }}
-                          onPointerEnter={() => {
-                            if (!draggingBookingId) return;
-                            setDragOverKey(slotKey);
-                          }}
-                          onPointerUp={() => {
-                            if (!draggingBookingId) return;
-                            void moveBooking(draggingBookingId, r.id, tr.t);
-                          }}
-                          style={{
-                            height: rowH,
-                            borderBottom: "1px solid #f6f6f6",
-                            cursor: draggingBookingId ? "grabbing" : "pointer",
-                            position: "relative",
-                            zIndex: 1,
-                            background: isDragOver ? "#eef6ff" : "transparent",
-                            outline: isDragOver ? "2px dashed #1e90ff" : "none",
-                            outlineOffset: -2,
-                          }}
-                          title="Clicca per inserire prenotazione o bloccare il campo"
-                        />
-                      );
-                    })}
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        height: rowH,
+                        padding: "12px 6px",
+                        fontSize: 11,
+                        fontWeight: isFullHour ? 900 : 700,
+                        color: isFullHour ? "#111827" : "#4b5563",
+                        background: hourBand ? "#ffffff" : "#eef2f7",
+                        borderBottom: isFullHour ? "2px solid #cbd5e1" : "1px solid #e5e7eb",
+                      }}
+                    >
+                      {t.label}
+                    </div>
+                  );
+                })}
+              </div>
 
-                    {(itemsByRes.get(r.id) ?? []).map((it: any) => {
-                      const top = clamp(topPx(it.start), 0, gridH);
-                      const h = clamp(heightPx(it.start, it.end), 28, gridH - top);
-                      const isBlock = it.type === "BLOCK";
-                      const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
+              <div style={{ position: "relative" }}>
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${orderedResources.length}, ${colW}px)` }}>
+                  {orderedResources.map((r) => (
+                    <div
+                      key={r.id}
+                      style={{
+                        position: "relative",
+                        height: gridH,
+                        borderRight: "1px solid #d1d5db",
+                        background: "#f9fafb",
+                      }}
+                    >
+                      {timeRows.map((tr, idx) => {
+                        const slotKey = `${r.id}-${tr.t}`;
+                        const isDragOver = dragOverKey === slotKey;
+                        const minutes = new Date(tr.t).getMinutes();
+                        const isFullHour = minutes === 0;
+                        const hourBand = Math.floor(idx / 2) % 2 === 0;
 
-                      return (
-                        <div
-                          key={it.id}
-                          onPointerDown={(e) => {
-                            if (it.type !== "BOOKING") return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDraggingBookingId(it.booking.id);
-                            setDragOverKey(null);
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-
-                            if (didMove) return;
-
-                            if (it.type === "BOOKING") {
-                              openDetail(it.booking);
-                            }
-
-                            if (it.type === "BLOCK") {
-                              openBlockDetail(it.block);
-                            }
-                          }}
-                          title={`${it.title}\n${it.subtitle}`}
-                          style={{
-                            position: "absolute",
-                            left: 10,
-                            right: 10,
-                            top: top,
-                            height: h,
-                            borderRadius: 12,
-                            background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
-                            border: isBlock
-                              ? "1px solid #f1c27d"
-                              : paid
-                              ? "1px solid #9ad19a"
-                              : "1px solid #d0d0d0",
-                            padding: 10,
-                            boxSizing: "border-box",
-                            overflow: "hidden",
-                            cursor: it.type === "BOOKING" ? "grab" : "pointer",
-                            zIndex: 20,
-                            pointerEvents: "auto",
-                            opacity: draggingBookingId === it.id ? 0.55 : 1,
-                            touchAction: "none",
-                            userSelect: "none",
-                            WebkitUserSelect: "none",
-                          }}
-                        >
+                        return (
                           <div
+                            key={idx}
+                            onClick={() => {
+                              if (!draggingBookingId) openNewSlot(r.id, tr.t);
+                            }}
+                            onPointerEnter={() => {
+                              if (!draggingBookingId) return;
+                              setDragOverKey(slotKey);
+                            }}
+                            onPointerUp={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (!draggingBookingId) return;
+                              void moveBooking(draggingBookingId, r.id, tr.t);
+                            }}
                             style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: 10,
+                              height: rowH,
+                              borderBottom: isFullHour ? "2px solid #cbd5e1" : "1px solid #e5e7eb",
+                              cursor: draggingBookingId ? "grabbing" : "pointer",
+                              position: "relative",
+                              zIndex: 1,
+                              background: isDragOver ? "#dbeafe" : hourBand ? "#ffffff" : "#eef2f7",
+                              outline: isDragOver ? "2px dashed #1e90ff" : "none",
+                              outlineOffset: -2,
+                            }}
+                            title="Clicca per inserire prenotazione o bloccare il campo"
+                          />
+                        );
+                      })}
+
+                      {(itemsByRes.get(r.id) ?? []).map((it: any) => {
+                        const top = clamp(topPx(it.start), 0, gridH);
+                        const h = clamp(heightPx(it.start, it.end), 28, gridH - top);
+                        const isBlock = it.type === "BLOCK";
+                        const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
+
+                        let bookingBg = "#e5e7eb";
+                        let bookingBorder = "#cfd4dc";
+                        if (isBlock) {
+                          bookingBg = "#ffe8cc";
+                          bookingBorder = "#f1c27d";
+                        } else if (paid) {
+                          bookingBg = "#d9f5d9";
+                          bookingBorder = "#9ad19a";
+                        } else if (r.name === "Tendone" && it.sport === "TENNIS") {
+                          bookingBg = "#dbeafe";
+                          bookingBorder = "#93c5fd";
+                        } else if (r.name === "Tendone" && it.sport === "CALCETTO") {
+                          bookingBg = "#fde68a";
+                          bookingBorder = "#fbbf24";
+                        }
+
+                        return (
+                          <div
+                            key={it.id}
+                            onPointerDown={(e) => {
+                              if (it.type !== "BOOKING") return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDraggingBookingId(it.booking.id);
+                              setDragOverKey(null);
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+
+                              if (didMove) return;
+
+                              if (it.type === "BOOKING") openDetail(it.booking);
+                              if (it.type === "BLOCK") openBlockDetail(it.block);
+                            }}
+                            title={`${it.title}\n${it.subtitle}`}
+                            style={{
+                              position: "absolute",
+                              left: 8,
+                              right: 8,
+                              top: top + 2,
+                              height: h - 4,
+                              borderRadius: 12,
+                              background: bookingBg,
+                              border: `1px solid ${bookingBorder}`,
+                              padding: 8,
+                              boxSizing: "border-box",
+                              overflow: "hidden",
+                              cursor: it.type === "BOOKING" ? "grab" : "pointer",
+                              zIndex: 20,
+                              pointerEvents: "auto",
+                              opacity: draggingBookingId === it.id ? 0.55 : 1,
+                              touchAction: "none",
+                              userSelect: "none",
+                              WebkitUserSelect: "none",
+                              boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
                             }}
                           >
                             <div
                               style={{
-                                fontWeight: 950,
-                                fontSize: 13,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {it.title}
-                            </div>
-
-                            <div
-                              style={{
                                 display: "flex",
-                                alignItems: "center",
+                                justifyContent: "space-between",
                                 gap: 6,
+                                alignItems: "flex-start",
                               }}
                             >
                               <div
                                 style={{
-                                  fontSize: 11,
                                   fontWeight: 950,
-                                  padding: "4px 8px",
-                                  borderRadius: 999,
-                                  background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
-                                  border: "1px solid rgba(0,0,0,0.08)",
-                                  whiteSpace: "nowrap",
+                                  fontSize: 12,
+                                  lineHeight: 1.1,
+                                  whiteSpace: "normal",
+                                  wordBreak: "break-word",
+                                  flex: 1,
+                                  marginRight: 4,
                                 }}
                               >
-                                {it.badge}
+                                {it.title}
                               </div>
 
-                              {it.type === "BOOKING" ? (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 950,
+                                    padding: "3px 6px",
+                                    borderRadius: 999,
+                                    background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
+                                    border: "1px solid rgba(0,0,0,0.08)",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {it.badge}
+                                </div>
+
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    openDetail(it.booking);
+                                    if (it.type === "BOOKING") openDetail(it.booking);
+                                    if (it.type === "BLOCK") openBlockDetail(it.block);
                                   }}
                                   style={{
-                                    fontSize: 11,
+                                    fontSize: 10,
                                     fontWeight: 900,
-                                    padding: "4px 8px",
+                                    padding: "3px 6px",
                                     borderRadius: 8,
                                     border: "1px solid #ccc",
                                     background: "white",
@@ -764,87 +1058,73 @@ export default function CalendarioAdmin() {
                                 >
                                   Apri
                                 </button>
-                              ) : null}
-
-                              {it.type === "BLOCK" ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openBlockDetail(it.block);
-                                  }}
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: 900,
-                                    padding: "4px 8px",
-                                    borderRadius: 8,
-                                    border: "1px solid #e6b35c",
-                                    background: "white",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  Apri
-                                </button>
-                              ) : null}
+                              </div>
                             </div>
-                          </div>
 
-                          <div
-                            style={{
-                              marginTop: 6,
-                              fontSize: 12,
-                              fontWeight: 800,
-                              opacity: 0.85,
-                            }}
-                          >
-                            {it.subtitle}
-                          </div>
-
-                          {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
                             <div
                               style={{
                                 marginTop: 6,
-                                fontSize: 12,
-                                fontWeight: 950,
-                                pointerEvents: "none",
+                                fontSize: 10,
+                                fontWeight: 800,
+                                opacity: 0.9,
+                                lineHeight: 1.15,
+                                whiteSpace: "normal",
+                                wordBreak: "break-word",
                               }}
                             >
-                              Totale: {eurFromCents(it.booking.total_amount_cents)}
-                              {it.booking?.paid_at ? (
-                                <>
-                                  {" "}• Incassato:{" "}
-                                  {eurFromCents(
-                                    it.booking.paid_amount_cents ??
-                                      it.booking.total_amount_cents ??
-                                      null
-                                  )}
-                                </>
-                              ) : null}
+                              {it.subtitle}
+                              {it.sport ? ` • ${it.sport}` : ""}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
 
-              {nowLineTop !== null && (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    top: nowLineTop,
-                    height: 2,
-                    background: "#1e90ff",
-                    opacity: 0.55,
-                  }}
-                />
-              )}
+                            {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
+                              <div
+                                style={{
+                                  marginTop: 6,
+                                  fontSize: 10,
+                                  fontWeight: 950,
+                                  pointerEvents: "none",
+                                  lineHeight: 1.15,
+                                  whiteSpace: "normal",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                Totale: {eurFromCents(it.booking.total_amount_cents)}
+                                {it.booking?.paid_at ? (
+                                  <>
+                                    {" "}• Incassato:{" "}
+                                    {eurFromCents(
+                                      it.booking.paid_amount_cents ??
+                                        it.booking.total_amount_cents ??
+                                        null
+                                    )}
+                                  </>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                {nowLineTop !== null && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      top: nowLineTop,
+                      height: 2,
+                      background: "#1e90ff",
+                      opacity: 0.55,
+                    }}
+                  />
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {newOpen && (
           <div
@@ -898,6 +1178,20 @@ export default function CalendarioAdmin() {
                   </select>
                 </label>
 
+                {selectedNewResource?.name === "Tendone" && (
+                  <label>
+                    <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Sport (solo Tendone)</div>
+                    <select
+                      value={newSport}
+                      onChange={(e) => setNewSport(e.target.value as "CALCETTO" | "TENNIS")}
+                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                    >
+                      <option value="CALCETTO">Calcetto - 50 €/ora</option>
+                      <option value="TENNIS">Tennis - 15 €/ora</option>
+                    </select>
+                  </label>
+                )}
+
                 <label>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Nome</div>
                   <input
@@ -915,6 +1209,28 @@ export default function CalendarioAdmin() {
                     style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   />
                 </label>
+
+                <div
+                  style={{
+                    padding: 10,
+                    borderRadius: 12,
+                    background: "#f8fafc",
+                    border: "1px solid #e5e7eb",
+                    fontSize: 13,
+                    fontWeight: 800,
+                  }}
+                >
+                  Stima prezzo:{" "}
+                  {selectedNewResource
+                    ? eurFromCents(pricePreview(selectedNewResource.name, newSport, newMinutes))
+                    : "-"}
+                </div>
+
+                {selectedNewResource?.name === "Tendone" && (
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    Nota: per salvare davvero sport e prezzo Tendone nel database servono anche modifiche alle route backend.
+                  </div>
+                )}
 
                 {newErr && (
                   <div
@@ -1017,14 +1333,14 @@ export default function CalendarioAdmin() {
               <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
                 <div><b>Nome:</b> {detailBooking.user_name}</div>
                 <div><b>Telefono:</b> {detailBooking.user_phone}</div>
-                <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}–{hhmm(detailBooking.end_ts)} • {date}</div>
+                <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}-{hhmm(detailBooking.end_ts)} • {date}</div>
                 <div><b>Totale:</b> {eurFromCents(detailBooking.total_amount_cents ?? null)}</div>
                 <div><b>Stato pagamento:</b> {detailBooking.paid_at ? "Pagata" : "Da pagare"}</div>
                 {detailBooking.payment_note ? <div><b>Nota:</b> {detailBooking.payment_note}</div> : null}
               </div>
 
               <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
-                <div style={{ fontWeight: 950 }}>Segna pagato</div>
+                <div style={{ fontWeight: 950, marginBottom: 8 }}>Segna pagato</div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
                   <label>
@@ -1100,6 +1416,19 @@ export default function CalendarioAdmin() {
                   </button>
 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => openMove(detailBooking)}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        border: "1px solid #ddd",
+                        background: "#eef2ff",
+                        fontWeight: 950,
+                      }}
+                    >
+                      Sposta
+                    </button>
+
                     <a
                       href={`/admin/ricevuta/${detailBooking.id}`}
                       target="_blank"
@@ -1142,6 +1471,101 @@ export default function CalendarioAdmin() {
           </div>
         )}
 
+        {moveOpen && moveBookingState && (
+          <div
+            onClick={() => setMoveOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 999,
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: "white",
+                borderRadius: 16,
+                padding: 20,
+                width: 420,
+                maxWidth: "100%",
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 18 }}>
+                Sposta prenotazione
+              </div>
+
+              <div style={{ marginTop: 10 }}>
+                <b>{moveBookingState.user_name}</b>
+              </div>
+
+              <div style={{ marginTop: 10 }}>
+                Campo
+                <select
+                  value={moveResource}
+                  onChange={(e) => setMoveResource(e.target.value)}
+                  style={{ width: "100%", padding: 10, marginTop: 4, borderRadius: 10, border: "1px solid #ddd" }}
+                >
+                  {orderedResources.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginTop: 10 }}>
+                Orario
+                <input
+                  type="datetime-local"
+                  value={moveTime.slice(0, 16)}
+                  onChange={(e) => setMoveTime(e.target.value)}
+                  style={{ width: "100%", padding: 10, marginTop: 4, borderRadius: 10, border: "1px solid #ddd" }}
+                />
+              </div>
+
+              {moveErr && (
+                <div style={{ color: "red", marginTop: 10 }}>
+                  {moveErr}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                <button
+                  onClick={() => setMoveOpen(false)}
+                  style={{
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    background: "white",
+                    fontWeight: 900,
+                  }}
+                >
+                  Annulla
+                </button>
+
+                <button
+                  onClick={confirmMove}
+                  style={{
+                    flex: 1,
+                    padding: 12,
+                    borderRadius: 12,
+                    border: "none",
+                    background: "#111",
+                    color: "white",
+                    fontWeight: 900,
+                  }}
+                >
+                  Salva
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {blockDetailOpen && detailBlock && (
           <div
             onClick={() => setBlockDetailOpen(false)}
@@ -1170,7 +1594,7 @@ export default function CalendarioAdmin() {
               <div style={{ fontSize: 18, fontWeight: 950 }}>Blocco campo</div>
 
               <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 13 }}>
-                <div><b>Orario:</b> {hhmm(detailBlock.start_ts)}–{hhmm(detailBlock.end_ts)}</div>
+                <div><b>Orario:</b> {hhmm(detailBlock.start_ts)}-{hhmm(detailBlock.end_ts)}</div>
                 <div><b>Motivo:</b> {detailBlock.note || "-"}</div>
               </div>
 
