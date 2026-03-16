@@ -1,14 +1,14 @@
 "use client";
-
+ 
 import { useEffect, useMemo, useState } from "react";
-
+ 
 type Resource = {
   id: string;
   name: string;
   is_active: boolean;
   is_public: boolean;
 };
-
+ 
 type Booking = {
   id: string;
   resource_id: string;
@@ -24,7 +24,7 @@ type Booking = {
   paid_at?: string | null;
   payment_note?: string | null;
 };
-
+ 
 type Block = {
   id: string;
   resource_id: string;
@@ -32,7 +32,7 @@ type Block = {
   end_ts: string;
   note?: string | null;
 };
-
+ 
 function todayISODate() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -40,19 +40,19 @@ function todayISODate() {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
-
+ 
 function hhmm(iso: string) {
   return new Date(iso).toLocaleTimeString("it-IT", {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
-
+ 
 function eurFromCents(cents?: number | null) {
   if (cents == null) return "-";
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
 }
-
+ 
 function getSchedule(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00.000Z`);
   const day = d.getUTCDay();
@@ -60,11 +60,11 @@ function getSchedule(dateStr: string) {
   if (isWeekend) return { openH: 8, openM: 0, closeH: 23, closeM: 0 };
   return { openH: 9, openM: 0, closeH: 23, closeM: 0 };
 }
-
+ 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
-
+ 
 export default function CalendarioAdmin() {
   const [date, setDate] = useState(todayISODate());
   const [resources, setResources] = useState<Resource[]>([]);
@@ -72,16 +72,17 @@ export default function CalendarioAdmin() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
-
+ 
   const STEP_MIN = 30;
   const { openH, openM, closeH, closeM } = getSchedule(date);
-
-  const timeColW = 78;
-  const colW = 260;
-  const rowH = 46;
-
+ 
+  // Più leggibile da mobile
+  const timeColW = 64;
+  const colW = 180;
+  const rowH = 52;
+ 
   const resourceOrder = ["Palazzetto", "Tendone", "Saletta palestra", "Spogliatoi"];
-
+ 
   const orderedResources = useMemo(() => {
     return [...resources].sort((a, b) => {
       const ai = resourceOrder.indexOf(a.name);
@@ -89,7 +90,7 @@ export default function CalendarioAdmin() {
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
     });
   }, [resources]);
-
+ 
   const dayBase = useMemo(
     () => new Date(`${date}T00:00:00.000Z`).getTime(),
     [date]
@@ -102,7 +103,7 @@ export default function CalendarioAdmin() {
     () => dayBase + (closeH * 60 + closeM) * 60 * 1000,
     [dayBase, closeH, closeM]
   );
-
+ 
   const timeRows = useMemo(() => {
     const rows: { label: string; t: number }[] = [];
     for (let t = dayStart; t < dayEnd; t += STEP_MIN * 60 * 1000) {
@@ -116,9 +117,9 @@ export default function CalendarioAdmin() {
     }
     return rows;
   }, [dayStart, dayEnd]);
-
+ 
   const gridH = timeRows.length * rowH;
-
+ 
   async function load() {
     setLoading(true);
     setMsg("");
@@ -126,7 +127,7 @@ export default function CalendarioAdmin() {
       const r = await fetch(`/api/admin/day?date=${encodeURIComponent(date)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore caricamento");
-
+ 
       setResources((j.resources ?? []).filter((x: any) => x.is_active));
       setBookings(j.bookings ?? []);
       setBlocks(j.blocks ?? []);
@@ -136,11 +137,11 @@ export default function CalendarioAdmin() {
       setLoading(false);
     }
   }
-
+ 
   useEffect(() => {
     load();
   }, [date]);
-
+ 
   const items = useMemo(() => {
     const out: Array<
       | {
@@ -166,7 +167,7 @@ export default function CalendarioAdmin() {
           block: Block;
         }
     > = [];
-
+ 
     for (const b of bookings) {
       const paid = !!b.paid_at;
       out.push({
@@ -176,12 +177,12 @@ export default function CalendarioAdmin() {
         start: new Date(b.start_ts).getTime(),
         end: new Date(b.end_ts).getTime(),
         title: b.user_name || "Prenotazione",
-        subtitle: `${hhmm(b.start_ts)}–${hhmm(b.end_ts)} • ${b.user_phone ?? ""}`,
+        subtitle: `${hhmm(b.start_ts)}-${hhmm(b.end_ts)} • ${b.user_phone ?? ""}`,
         badge: paid ? "Pagata" : "Da pagare",
         booking: b,
       });
     }
-
+ 
     for (const bl of blocks) {
       out.push({
         type: "BLOCK",
@@ -190,15 +191,15 @@ export default function CalendarioAdmin() {
         start: new Date(bl.start_ts).getTime(),
         end: new Date(bl.end_ts).getTime(),
         title: "Bloccato",
-        subtitle: `${hhmm(bl.start_ts)}–${hhmm(bl.end_ts)}${bl.note ? ` • ${bl.note}` : ""}`,
+        subtitle: `${hhmm(bl.start_ts)}-${hhmm(bl.end_ts)}${bl.note ? ` • ${bl.note}` : ""}`,
         badge: "Blocco",
         block: bl,
       });
     }
-
+ 
     return out;
   }, [bookings, blocks]);
-
+ 
   const itemsByRes = useMemo(() => {
     const map = new Map<string, typeof items>();
     for (const r of orderedResources) map.set(r.id, []);
@@ -212,17 +213,17 @@ export default function CalendarioAdmin() {
     }
     return map;
   }, [orderedResources, items]);
-
+ 
   function topPx(t: number) {
     const diffMin = (t - dayStart) / (60 * 1000);
     return (diffMin / STEP_MIN) * rowH;
   }
-
+ 
   function heightPx(s: number, e: number) {
     const diffMin = (e - s) / (60 * 1000);
     return (diffMin / STEP_MIN) * rowH;
   }
-
+ 
   const [newOpen, setNewOpen] = useState(false);
   const [newResourceId, setNewResourceId] = useState("");
   const [newStartISO, setNewStartISO] = useState("");
@@ -230,7 +231,7 @@ export default function CalendarioAdmin() {
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newErr, setNewErr] = useState("");
-
+ 
   function openNewSlot(resourceId: string, startT: number) {
     setNewResourceId(resourceId);
     setNewStartISO(new Date(startT).toISOString());
@@ -240,14 +241,14 @@ export default function CalendarioAdmin() {
     setNewErr("");
     setNewOpen(true);
   }
-
+ 
   async function submitNewBooking() {
     setNewErr("");
     try {
       const endISO = new Date(
         new Date(newStartISO).getTime() + newMinutes * 60 * 1000
       ).toISOString();
-
+ 
       const r = await fetch("/api/admin/create-booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -261,17 +262,17 @@ export default function CalendarioAdmin() {
           payMode: "BAR",
         }),
       });
-
+ 
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore creazione prenotazione");
-
+ 
       setNewOpen(false);
       await load();
     } catch (e: any) {
       setNewErr(e.message || "Errore creazione prenotazione");
     }
   }
-
+ 
   async function createBlock() {
     setNewErr("");
     try {
@@ -279,11 +280,11 @@ export default function CalendarioAdmin() {
         "Motivo blocco campo (es. Allenamento, Manutenzione, Evento)"
       );
       if (!reason) return;
-
+ 
       const endISO = new Date(
         new Date(newStartISO).getTime() + newMinutes * 60 * 1000
       ).toISOString();
-
+ 
       const r = await fetch("/api/admin/create-block", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -294,17 +295,17 @@ export default function CalendarioAdmin() {
           reason,
         }),
       });
-
+ 
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore creazione blocco");
-
+ 
       setNewOpen(false);
       await load();
     } catch (e: any) {
       setNewErr(e.message || "Errore creazione blocco");
     }
   }
-
+ 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -312,7 +313,7 @@ export default function CalendarioAdmin() {
   const [paymentNote, setPaymentNote] = useState("");
   const [updateTotalAlso, setUpdateTotalAlso] = useState(true);
   const [detailErr, setDetailErr] = useState("");
-
+ 
   function openDetail(b: Booking) {
     setDetailBooking(b);
     const baseCents = b.paid_amount_cents ?? b.total_amount_cents ?? null;
@@ -327,21 +328,21 @@ export default function CalendarioAdmin() {
     setDetailErr("");
     setDetailOpen(true);
   }
-
+ 
   async function markPaid() {
     if (!detailBooking) return;
-
+ 
     setDetailErr("");
     const normalized = (payAmount || "").replace(",", ".").trim();
     const num = Number(normalized);
-
+ 
     if (!isFinite(num) || num <= 0) {
       setDetailErr("Importo non valido");
       return;
     }
-
+ 
     const cents = Math.round(num * 100);
-
+ 
     try {
       const r = await fetch("/api/admin/mark-paid", {
         method: "POST",
@@ -354,22 +355,22 @@ export default function CalendarioAdmin() {
           updateTotalAlso: updateTotalAlso,
         }),
       });
-
+ 
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore pagamento");
-
+ 
       setDetailOpen(false);
       await load();
     } catch (e: any) {
       setDetailErr(e.message || "Errore pagamento");
     }
   }
-
+ 
   async function cancelBooking() {
     if (!detailBooking) return;
-
+ 
     const reason = prompt("Motivo disdetta (opzionale):") ?? "";
-
+ 
     try {
       const r = await fetch("/api/admin/cancel-booking", {
         method: "POST",
@@ -379,30 +380,30 @@ export default function CalendarioAdmin() {
           reason: reason,
         }),
       });
-
+ 
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore disdetta");
-
+ 
       setDetailOpen(false);
       await load();
     } catch (e: any) {
       setDetailErr(e.message || "Errore disdetta");
     }
   }
-
+ 
   const [blockDetailOpen, setBlockDetailOpen] = useState(false);
   const [detailBlock, setDetailBlock] = useState<Block | null>(null);
   const [blockErr, setBlockErr] = useState("");
-
+ 
   function openBlockDetail(bl: Block) {
     setDetailBlock(bl);
     setBlockErr("");
     setBlockDetailOpen(true);
   }
-
+ 
   async function deleteBlock() {
     if (!detailBlock) return;
-
+ 
     try {
       const r = await fetch("/api/admin/delete-block", {
         method: "POST",
@@ -411,47 +412,44 @@ export default function CalendarioAdmin() {
           blockId: detailBlock.id,
         }),
       });
-
+ 
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore eliminazione blocco");
-
+ 
       setBlockDetailOpen(false);
       await load();
     } catch (e: any) {
       setBlockErr(e.message || "Errore eliminazione blocco");
     }
   }
-
+ 
   const [draggingBookingId, setDraggingBookingId] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [didMove, setDidMove] = useState(false);
-
+ 
   useEffect(() => {
-  function stopDrag() {
-    setTimeout(() => {
+    function stopDrag() {
       setDraggingBookingId(null);
       setDragOverKey(null);
-    }, 80);
-  }
-
-  window.addEventListener("pointercancel", stopDrag);
-
-  return () => {
-    window.removeEventListener("pointercancel", stopDrag);
-  };
-}, []);
-
-
+    }
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+    return () => {
+      window.removeEventListener("pointerup", stopDrag);
+      window.removeEventListener("pointercancel", stopDrag);
+    };
+  }, []);
+ 
   async function moveBooking(bookingId: string, resourceId: string, startT: number) {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) return;
-
+ 
     const durationMs =
       new Date(booking.end_ts).getTime() - new Date(booking.start_ts).getTime();
-
+ 
     const startISO = new Date(startT).toISOString();
     const endISO = new Date(startT + durationMs).toISOString();
-
+ 
     try {
       const r = await fetch("/api/admin/move-booking", {
         method: "POST",
@@ -463,10 +461,10 @@ export default function CalendarioAdmin() {
           endISO,
         }),
       });
-
+ 
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore spostamento prenotazione");
-
+ 
       setDidMove(true);
       await load();
     } catch (e: any) {
@@ -477,33 +475,45 @@ export default function CalendarioAdmin() {
       setTimeout(() => setDidMove(false), 150);
     }
   }
-
+ 
   const nowLineTop = useMemo(() => {
     const now = Date.now();
     if (now < dayStart || now > dayEnd) return null;
     return topPx(now);
   }, [dayStart, dayEnd]);
-
+ 
   const minWidth = timeColW + orderedResources.length * colW;
-
+ 
   return (
-    <div style={{ padding: 16 }}>
+    <div style={{ padding: 12, background: "#f3f4f6", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1700, margin: "0 auto" }}>
-        <img src="/logo.png" style={{ height: 80, marginBottom: 20 }} />
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <h1 style={{ fontSize: 26, fontWeight: 900, marginRight: 12 }}>Calendario</h1>
-
+        <img src="/logo.png" style={{ height: 64, marginBottom: 12 }} />
+ 
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <h1 style={{ fontSize: 22, fontWeight: 900, marginRight: 10 }}>Calendario</h1>
+ 
           <label>
-            <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Data</div>
+            <div style={{ fontWeight: 800, fontSize: 11, opacity: 0.7 }}>Data</div>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+              style={{
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #d1d5db",
+                background: "white",
+              }}
             />
           </label>
-
+ 
           <button
             onClick={load}
             disabled={loading}
@@ -519,24 +529,24 @@ export default function CalendarioAdmin() {
           >
             Aggiorna
           </button>
-
-          <div style={{ marginLeft: "auto", display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e9ecef", fontWeight: 800 }}>
+ 
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e5e7eb", fontWeight: 800, fontSize: 13 }}>
               ✅ Prenotato
             </span>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#d9f5d9", fontWeight: 800 }}>
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#d9f5d9", fontWeight: 800, fontSize: 13 }}>
               💶 Pagata
             </span>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ffe8cc", fontWeight: 800 }}>
+            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ffe8cc", fontWeight: 800, fontSize: 13 }}>
               ⛔ Blocco
             </span>
           </div>
         </div>
-
-        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 12 }}>
-          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} – {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Tieni premuto su una prenotazione e trascinala su un altro slot.
+ 
+        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 11 }}>
+          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} - {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Tieni premuto su una prenotazione e trascinala su un altro slot.
         </div>
-
+ 
         {msg && (
           <div
             style={{
@@ -550,16 +560,17 @@ export default function CalendarioAdmin() {
             {msg}
           </div>
         )}
-
+ 
         <div
           style={{
             marginTop: 14,
-            border: "1px solid #eee",
-            borderRadius: 14,
+            border: "1px solid #d1d5db",
+            borderRadius: 16,
             overflowX: "auto",
             overflowY: "hidden",
             WebkitOverflowScrolling: "touch",
             touchAction: "pan-x pan-y",
+            background: "white",
           }}
         >
           <div
@@ -569,45 +580,53 @@ export default function CalendarioAdmin() {
               position: "sticky",
               top: 0,
               zIndex: 5,
-              background: "#fafafa",
-              borderBottom: "1px solid #eee",
+              background: "#e5e7eb",
+              borderBottom: "1px solid #cbd5e1",
               minWidth: minWidth,
             }}
           >
-            <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #eee" }} />
+            <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #cbd5e1" }} />
             {orderedResources.map((r) => (
               <div
                 key={r.id}
                 style={{
                   padding: 10,
                   fontWeight: 900,
-                  borderRight: "1px solid #eee",
+                  borderRight: "1px solid #cbd5e1",
                   whiteSpace: "nowrap",
+                  fontSize: 14,
                 }}
               >
                 {r.name}
               </div>
             ))}
           </div>
-
+ 
           <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
-            <div style={{ borderRight: "1px solid #eee" }}>
-              {timeRows.map((t, i) => (
-                <div
-                  key={i}
-                  style={{
-                    height: rowH,
-                    padding: "12px 8px",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    opacity: 0.7,
-                  }}
-                >
-                  {t.label}
-                </div>
-              ))}
+            <div style={{ borderRight: "1px solid #cbd5e1", background: "#f3f4f6" }}>
+              {timeRows.map((t, i) => {
+                const minutes = new Date(t.t).getMinutes();
+                const isFullHour = minutes === 0;
+ 
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      height: rowH,
+                      padding: "12px 6px",
+                      fontSize: 11,
+                      fontWeight: isFullHour ? 900 : 700,
+                      color: isFullHour ? "#111827" : "#4b5563",
+                      background: i % 2 === 0 ? "#f9fafb" : "#f3f4f6",
+                      borderBottom: isFullHour ? "2px solid #cbd5e1" : "1px solid #e5e7eb",
+                    }}
+                  >
+                    {t.label}
+                  </div>
+                );
+              })}
             </div>
-
+ 
             <div style={{ position: "relative" }}>
               <div style={{ display: "grid", gridTemplateColumns: `repeat(${orderedResources.length}, ${colW}px)` }}>
                 {orderedResources.map((r) => (
@@ -616,13 +635,16 @@ export default function CalendarioAdmin() {
                     style={{
                       position: "relative",
                       height: gridH,
-                      borderRight: "1px solid #f0f0f0",
+                      borderRight: "1px solid #d1d5db",
+                      background: "#f9fafb",
                     }}
                   >
                     {timeRows.map((tr, idx) => {
                       const slotKey = `${r.id}-${tr.t}`;
                       const isDragOver = dragOverKey === slotKey;
-
+                      const minutes = new Date(tr.t).getMinutes();
+                      const isFullHour = minutes === 0;
+ 
                       return (
                         <div
                           key={idx}
@@ -634,19 +656,22 @@ export default function CalendarioAdmin() {
                             setDragOverKey(slotKey);
                           }}
                           onPointerUp={(e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  if (!draggingBookingId) return;
-  void moveBooking(draggingBookingId, r.id, tr.t);
-}}
-
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!draggingBookingId) return;
+                            void moveBooking(draggingBookingId, r.id, tr.t);
+                          }}
                           style={{
                             height: rowH,
-                            borderBottom: "1px solid #f6f6f6",
+                            borderBottom: isFullHour ? "2px solid #cbd5e1" : "1px solid #e5e7eb",
                             cursor: draggingBookingId ? "grabbing" : "pointer",
                             position: "relative",
                             zIndex: 1,
-                            background: isDragOver ? "#eef6ff" : "transparent",
+                            background: isDragOver
+                              ? "#dbeafe"
+                              : idx % 2 === 0
+                              ? "#f3f4f6"
+                              : "#ffffff",
                             outline: isDragOver ? "2px dashed #1e90ff" : "none",
                             outlineOffset: -2,
                           }}
@@ -654,13 +679,13 @@ export default function CalendarioAdmin() {
                         />
                       );
                     })}
-
+ 
                     {(itemsByRes.get(r.id) ?? []).map((it: any) => {
                       const top = clamp(topPx(it.start), 0, gridH);
                       const h = clamp(heightPx(it.start, it.end), 28, gridH - top);
                       const isBlock = it.type === "BLOCK";
                       const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
-
+ 
                       return (
                         <div
                           key={it.id}
@@ -674,13 +699,13 @@ export default function CalendarioAdmin() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-
+ 
                             if (didMove) return;
-
+ 
                             if (it.type === "BOOKING") {
                               openDetail(it.booking);
                             }
-
+ 
                             if (it.type === "BLOCK") {
                               openBlockDetail(it.block);
                             }
@@ -688,18 +713,18 @@ export default function CalendarioAdmin() {
                           title={`${it.title}\n${it.subtitle}`}
                           style={{
                             position: "absolute",
-                            left: 10,
-                            right: 10,
-                            top: top,
-                            height: h,
+                            left: 8,
+                            right: 8,
+                            top: top + 2,
+                            height: h - 4,
                             borderRadius: 12,
-                            background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e9ecef",
+                            background: isBlock ? "#ffe8cc" : paid ? "#d9f5d9" : "#e5e7eb",
                             border: isBlock
                               ? "1px solid #f1c27d"
                               : paid
                               ? "1px solid #9ad19a"
-                              : "1px solid #d0d0d0",
-                            padding: 10,
+                              : "1px solid #cfd4dc",
+                            padding: 8,
                             boxSizing: "border-box",
                             overflow: "hidden",
                             cursor: it.type === "BOOKING" ? "grab" : "pointer",
@@ -709,39 +734,42 @@ export default function CalendarioAdmin() {
                             touchAction: "none",
                             userSelect: "none",
                             WebkitUserSelect: "none",
+                            boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
                           }}
                         >
                           <div
                             style={{
                               display: "flex",
                               justifyContent: "space-between",
-                              gap: 10,
+                              gap: 6,
+                              alignItems: "flex-start",
                             }}
                           >
                             <div
                               style={{
                                 fontWeight: 950,
-                                fontSize: 13,
+                                fontSize: 12,
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
+                                maxWidth: 90,
                               }}
                             >
                               {it.title}
                             </div>
-
+ 
                             <div
                               style={{
                                 display: "flex",
                                 alignItems: "center",
-                                gap: 6,
+                                gap: 4,
                               }}
                             >
                               <div
                                 style={{
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: 950,
-                                  padding: "4px 8px",
+                                  padding: "3px 6px",
                                   borderRadius: 999,
                                   background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
                                   border: "1px solid rgba(0,0,0,0.08)",
@@ -750,67 +778,45 @@ export default function CalendarioAdmin() {
                               >
                                 {it.badge}
                               </div>
-
-                              {it.type === "BOOKING" ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openDetail(it.booking);
-                                  }}
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: 900,
-                                    padding: "4px 8px",
-                                    borderRadius: 8,
-                                    border: "1px solid #ccc",
-                                    background: "white",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  Apri
-                                </button>
-                              ) : null}
-
-                              {it.type === "BLOCK" ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openBlockDetail(it.block);
-                                  }}
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: 900,
-                                    padding: "4px 8px",
-                                    borderRadius: 8,
-                                    border: "1px solid #e6b35c",
-                                    background: "white",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  Apri
-                                </button>
-                              ) : null}
+ 
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (it.type === "BOOKING") openDetail(it.booking);
+                                  if (it.type === "BLOCK") openBlockDetail(it.block);
+                                }}
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 900,
+                                  padding: "3px 6px",
+                                  borderRadius: 8,
+                                  border: "1px solid #ccc",
+                                  background: "white",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Apri
+                              </button>
                             </div>
                           </div>
-
+ 
                           <div
                             style={{
                               marginTop: 6,
-                              fontSize: 12,
+                              fontSize: 10,
                               fontWeight: 800,
-                              opacity: 0.85,
+                              opacity: 0.9,
                             }}
                           >
                             {it.subtitle}
                           </div>
-
+ 
                           {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
                             <div
                               style={{
                                 marginTop: 6,
-                                fontSize: 12,
+                                fontSize: 10,
                                 fontWeight: 950,
                                 pointerEvents: "none",
                               }}
@@ -834,7 +840,7 @@ export default function CalendarioAdmin() {
                   </div>
                 ))}
               </div>
-
+ 
               {nowLineTop !== null && (
                 <div
                   style={{
@@ -851,7 +857,7 @@ export default function CalendarioAdmin() {
             </div>
           </div>
         </div>
-
+ 
         {newOpen && (
           <div
             onClick={() => setNewOpen(false)}
@@ -881,7 +887,7 @@ export default function CalendarioAdmin() {
               <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
                 Orario: {hhmm(newStartISO)} • Data: {date}
               </div>
-
+ 
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 <label>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Durata</div>
@@ -903,7 +909,7 @@ export default function CalendarioAdmin() {
                     <option value={600}>10 ore</option>
                   </select>
                 </label>
-
+ 
                 <label>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Nome</div>
                   <input
@@ -912,7 +918,7 @@ export default function CalendarioAdmin() {
                     style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   />
                 </label>
-
+ 
                 <label>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Telefono</div>
                   <input
@@ -921,7 +927,7 @@ export default function CalendarioAdmin() {
                     style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   />
                 </label>
-
+ 
                 {newErr && (
                   <div
                     style={{
@@ -934,7 +940,7 @@ export default function CalendarioAdmin() {
                     {newErr}
                   </div>
                 )}
-
+ 
                 <div
                   style={{
                     display: "flex",
@@ -958,7 +964,7 @@ export default function CalendarioAdmin() {
                   >
                     Blocca campo
                   </button>
-
+ 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <button
                       onClick={() => setNewOpen(false)}
@@ -972,7 +978,7 @@ export default function CalendarioAdmin() {
                     >
                       Chiudi
                     </button>
-
+ 
                     <button
                       onClick={submitNewBooking}
                       style={{
@@ -992,7 +998,7 @@ export default function CalendarioAdmin() {
             </div>
           </div>
         )}
-
+ 
         {detailOpen && detailBooking && (
           <div
             onClick={() => setDetailOpen(false)}
@@ -1019,19 +1025,19 @@ export default function CalendarioAdmin() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 950 }}>Prenotazione</div>
-
+ 
               <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
                 <div><b>Nome:</b> {detailBooking.user_name}</div>
                 <div><b>Telefono:</b> {detailBooking.user_phone}</div>
-                <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}–{hhmm(detailBooking.end_ts)} • {date}</div>
+                <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}-{hhmm(detailBooking.end_ts)} • {date}</div>
                 <div><b>Totale:</b> {eurFromCents(detailBooking.total_amount_cents ?? null)}</div>
                 <div><b>Stato pagamento:</b> {detailBooking.paid_at ? "Pagata" : "Da pagare"}</div>
                 {detailBooking.payment_note ? <div><b>Nota:</b> {detailBooking.payment_note}</div> : null}
               </div>
-
+ 
               <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
                 <div style={{ fontWeight: 950 }}>Segna pagato</div>
-
+ 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
                   <label>
                     <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Importo (€)</div>
@@ -1042,7 +1048,7 @@ export default function CalendarioAdmin() {
                       placeholder="es. 60,00"
                     />
                   </label>
-
+ 
                   <label>
                     <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Metodo</div>
                     <select
@@ -1055,7 +1061,7 @@ export default function CalendarioAdmin() {
                     </select>
                   </label>
                 </div>
-
+ 
                 <label style={{ marginTop: 10, display: "block" }}>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Nota pagamento</div>
                   <input
@@ -1065,7 +1071,7 @@ export default function CalendarioAdmin() {
                     placeholder="es. sconto, saldo, promo..."
                   />
                 </label>
-
+ 
                 <label style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
                   <input
                     type="checkbox"
@@ -1076,7 +1082,7 @@ export default function CalendarioAdmin() {
                     Aggiorna anche il totale prenotazione con l’importo incassato
                   </span>
                 </label>
-
+ 
                 {detailErr && (
                   <div
                     style={{
@@ -1090,7 +1096,7 @@ export default function CalendarioAdmin() {
                     {detailErr}
                   </div>
                 )}
-
+ 
                 <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 14, flexWrap: "wrap" }}>
                   <button
                     onClick={cancelBooking}
@@ -1104,7 +1110,7 @@ export default function CalendarioAdmin() {
                   >
                     Disdici prenotazione
                   </button>
-
+ 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <a
                       href={`/admin/ricevuta/${detailBooking.id}`}
@@ -1123,7 +1129,7 @@ export default function CalendarioAdmin() {
                     >
                       Ricevuta
                     </a>
-
+ 
                     <button
                       onClick={markPaid}
                       style={{
@@ -1139,7 +1145,7 @@ export default function CalendarioAdmin() {
                     </button>
                   </div>
                 </div>
-
+ 
                 <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
                   Tip: “Ricevuta” apre la pagina stampabile. Poi fai Stampa → Salva PDF.
                 </div>
@@ -1147,7 +1153,7 @@ export default function CalendarioAdmin() {
             </div>
           </div>
         )}
-
+ 
         {blockDetailOpen && detailBlock && (
           <div
             onClick={() => setBlockDetailOpen(false)}
@@ -1174,12 +1180,12 @@ export default function CalendarioAdmin() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 950 }}>Blocco campo</div>
-
+ 
               <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 13 }}>
-                <div><b>Orario:</b> {hhmm(detailBlock.start_ts)}–{hhmm(detailBlock.end_ts)}</div>
+                <div><b>Orario:</b> {hhmm(detailBlock.start_ts)}-{hhmm(detailBlock.end_ts)}</div>
                 <div><b>Motivo:</b> {detailBlock.note || "-"}</div>
               </div>
-
+ 
               {blockErr && (
                 <div
                   style={{
@@ -1193,7 +1199,7 @@ export default function CalendarioAdmin() {
                   {blockErr}
                 </div>
               )}
-
+ 
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
                 <button
                   onClick={() => setBlockDetailOpen(false)}
@@ -1207,7 +1213,7 @@ export default function CalendarioAdmin() {
                 >
                   Chiudi
                 </button>
-
+ 
                 <button
                   onClick={deleteBlock}
                   style={{
