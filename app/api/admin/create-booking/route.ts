@@ -10,6 +10,7 @@ type Body = {
   userPhone: string;
   payMode?: "BAR" | "FULL" | "DEPOSIT";
   source?: string | null;
+  sport?: "CALCETTO" | "TENNIS" | null;
 };
 
 const PRICE_PER_HOUR_CENTS: Record<string, number> = {
@@ -18,7 +19,12 @@ const PRICE_PER_HOUR_CENTS: Record<string, number> = {
   Sintetico: 5000,
 };
 
-function calcTotalCents(resourceName: string, minutes: number) {
+function calcTotalCents(resourceName: string, minutes: number, sport?: string | null) {
+  if (resourceName === "Tendone") {
+    if (sport === "TENNIS") return Math.round(1500 * (minutes / 60));
+    return Math.round(5000 * (minutes / 60));
+  }
+
   const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
   return Math.round(perHour * (minutes / 60));
 }
@@ -156,9 +162,8 @@ export async function POST(req: Request) {
   }
 
   if (Number(body.minutes) < 60 || Number(body.minutes) > 600) {
-  return NextResponse.json({ error: "minutes non validi" }, { status: 400 });
-}
-
+    return NextResponse.json({ error: "minutes non validi" }, { status: 400 });
+  }
 
   const { data: resRow, error: rErr } = await supabase
     .from("resources")
@@ -180,23 +185,42 @@ export async function POST(req: Request) {
     );
   }
 
-  const totalCents = calcTotalCents(resRow.name, body.minutes);
+  const normalizedSport =
+    resRow.name === "Tendone"
+      ? body.sport === "TENNIS"
+        ? "TENNIS"
+        : "CALCETTO"
+      : null;
+
+  const totalCents = calcTotalCents(resRow.name, body.minutes, normalizedSport);
+
+  const paymentNote =
+    normalizedSport != null
+      ? `SPORT:${normalizedSport}`
+      : null;
+
+  const insertPayload: Record<string, any> = {
+    resource_id: body.resourceId,
+    user_name: body.userName,
+    user_phone: body.userPhone,
+    start_ts: body.startISO,
+    end_ts: body.endISO,
+    status: "CONFIRMED",
+    pay_mode: body.payMode ?? "BAR",
+    total_amount_cents: totalCents,
+    deposit_amount_cents: 500,
+    currency: "eur",
+    source: body.source ?? null,
+    payment_note: paymentNote,
+  };
+
+  // Se nel database hai aggiunto la colonna "sport", la salva.
+  // Se non esiste, togli pure questa riga.
+  insertPayload.sport = normalizedSport;
 
   const { data, error } = await supabase
     .from("bookings")
-    .insert({
-      resource_id: body.resourceId,
-      user_name: body.userName,
-      user_phone: body.userPhone,
-      start_ts: body.startISO,
-      end_ts: body.endISO,
-      status: "CONFIRMED",
-      pay_mode: body.payMode ?? "BAR",
-      total_amount_cents: totalCents,
-      deposit_amount_cents: 500,
-      currency: "eur",
-      source: body.source ?? null,
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 
@@ -220,9 +244,14 @@ export async function POST(req: Request) {
   }
 
   try {
+    const fieldLabel =
+      normalizedSport != null
+        ? `${resRow.name} (${normalizedSport.toLowerCase()})`
+        : resRow.name;
+
     await sendWhatsAppBookingConfirmation({
       to: body.userPhone,
-      fieldName: resRow.name,
+      fieldName: fieldLabel,
       timeLabel: formatTimeLabel(body.startISO, body.endISO),
     });
   } catch (e) {
@@ -234,5 +263,6 @@ export async function POST(req: Request) {
     bookingId: data.id,
     totalCents,
     customerSaved: true,
+    sport: normalizedSport,
   });
 }
