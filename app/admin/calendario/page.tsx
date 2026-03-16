@@ -1,14 +1,14 @@
 "use client";
- 
+
 import { useEffect, useMemo, useState } from "react";
- 
+
 type Resource = {
   id: string;
   name: string;
   is_active: boolean;
   is_public: boolean;
 };
- 
+
 type Booking = {
   id: string;
   resource_id: string;
@@ -24,7 +24,7 @@ type Booking = {
   paid_at?: string | null;
   payment_note?: string | null;
 };
- 
+
 type Block = {
   id: string;
   resource_id: string;
@@ -32,7 +32,7 @@ type Block = {
   end_ts: string;
   note?: string | null;
 };
- 
+
 function todayISODate() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -40,19 +40,19 @@ function todayISODate() {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
- 
+
 function hhmm(iso: string) {
   return new Date(iso).toLocaleTimeString("it-IT", {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
- 
+
 function eurFromCents(cents?: number | null) {
   if (cents == null) return "-";
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
 }
- 
+
 function getSchedule(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00.000Z`);
   const day = d.getUTCDay();
@@ -60,11 +60,11 @@ function getSchedule(dateStr: string) {
   if (isWeekend) return { openH: 8, openM: 0, closeH: 23, closeM: 0 };
   return { openH: 9, openM: 0, closeH: 23, closeM: 0 };
 }
- 
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
- 
+
 export default function CalendarioAdmin() {
   const [date, setDate] = useState(todayISODate());
   const [resources, setResources] = useState<Resource[]>([]);
@@ -72,17 +72,16 @@ export default function CalendarioAdmin() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
- 
+
   const STEP_MIN = 30;
   const { openH, openM, closeH, closeM } = getSchedule(date);
- 
-  // Più leggibile da mobile
+
   const timeColW = 64;
-  const colW = 180;
+  const colW = 220;
   const rowH = 52;
- 
+
   const resourceOrder = ["Palazzetto", "Tendone", "Saletta palestra", "Spogliatoi"];
- 
+
   const orderedResources = useMemo(() => {
     return [...resources].sort((a, b) => {
       const ai = resourceOrder.indexOf(a.name);
@@ -90,7 +89,7 @@ export default function CalendarioAdmin() {
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
     });
   }, [resources]);
- 
+
   const dayBase = useMemo(
     () => new Date(`${date}T00:00:00.000Z`).getTime(),
     [date]
@@ -103,7 +102,7 @@ export default function CalendarioAdmin() {
     () => dayBase + (closeH * 60 + closeM) * 60 * 1000,
     [dayBase, closeH, closeM]
   );
- 
+
   const timeRows = useMemo(() => {
     const rows: { label: string; t: number }[] = [];
     for (let t = dayStart; t < dayEnd; t += STEP_MIN * 60 * 1000) {
@@ -117,9 +116,9 @@ export default function CalendarioAdmin() {
     }
     return rows;
   }, [dayStart, dayEnd]);
- 
+
   const gridH = timeRows.length * rowH;
- 
+
   async function load() {
     setLoading(true);
     setMsg("");
@@ -127,7 +126,7 @@ export default function CalendarioAdmin() {
       const r = await fetch(`/api/admin/day?date=${encodeURIComponent(date)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore caricamento");
- 
+
       setResources((j.resources ?? []).filter((x: any) => x.is_active));
       setBookings(j.bookings ?? []);
       setBlocks(j.blocks ?? []);
@@ -137,11 +136,11 @@ export default function CalendarioAdmin() {
       setLoading(false);
     }
   }
- 
+
   useEffect(() => {
     load();
   }, [date]);
- 
+
   const items = useMemo(() => {
     const out: Array<
       | {
@@ -167,7 +166,7 @@ export default function CalendarioAdmin() {
           block: Block;
         }
     > = [];
- 
+
     for (const b of bookings) {
       const paid = !!b.paid_at;
       out.push({
@@ -182,7 +181,7 @@ export default function CalendarioAdmin() {
         booking: b,
       });
     }
- 
+
     for (const bl of blocks) {
       out.push({
         type: "BLOCK",
@@ -196,10 +195,10 @@ export default function CalendarioAdmin() {
         block: bl,
       });
     }
- 
+
     return out;
   }, [bookings, blocks]);
- 
+
   const itemsByRes = useMemo(() => {
     const map = new Map<string, typeof items>();
     for (const r of orderedResources) map.set(r.id, []);
@@ -213,17 +212,17 @@ export default function CalendarioAdmin() {
     }
     return map;
   }, [orderedResources, items]);
- 
+
   function topPx(t: number) {
     const diffMin = (t - dayStart) / (60 * 1000);
     return (diffMin / STEP_MIN) * rowH;
   }
- 
+
   function heightPx(s: number, e: number) {
     const diffMin = (e - s) / (60 * 1000);
     return (diffMin / STEP_MIN) * rowH;
   }
- 
+
   const [newOpen, setNewOpen] = useState(false);
   const [newResourceId, setNewResourceId] = useState("");
   const [newStartISO, setNewStartISO] = useState("");
@@ -231,7 +230,7 @@ export default function CalendarioAdmin() {
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newErr, setNewErr] = useState("");
- 
+
   function openNewSlot(resourceId: string, startT: number) {
     setNewResourceId(resourceId);
     setNewStartISO(new Date(startT).toISOString());
@@ -241,14 +240,14 @@ export default function CalendarioAdmin() {
     setNewErr("");
     setNewOpen(true);
   }
- 
+
   async function submitNewBooking() {
     setNewErr("");
     try {
       const endISO = new Date(
         new Date(newStartISO).getTime() + newMinutes * 60 * 1000
       ).toISOString();
- 
+
       const r = await fetch("/api/admin/create-booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,17 +261,17 @@ export default function CalendarioAdmin() {
           payMode: "BAR",
         }),
       });
- 
+
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore creazione prenotazione");
- 
+
       setNewOpen(false);
       await load();
     } catch (e: any) {
       setNewErr(e.message || "Errore creazione prenotazione");
     }
   }
- 
+
   async function createBlock() {
     setNewErr("");
     try {
@@ -280,11 +279,11 @@ export default function CalendarioAdmin() {
         "Motivo blocco campo (es. Allenamento, Manutenzione, Evento)"
       );
       if (!reason) return;
- 
+
       const endISO = new Date(
         new Date(newStartISO).getTime() + newMinutes * 60 * 1000
       ).toISOString();
- 
+
       const r = await fetch("/api/admin/create-block", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -295,17 +294,17 @@ export default function CalendarioAdmin() {
           reason,
         }),
       });
- 
+
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore creazione blocco");
- 
+
       setNewOpen(false);
       await load();
     } catch (e: any) {
       setNewErr(e.message || "Errore creazione blocco");
     }
   }
- 
+
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -313,7 +312,7 @@ export default function CalendarioAdmin() {
   const [paymentNote, setPaymentNote] = useState("");
   const [updateTotalAlso, setUpdateTotalAlso] = useState(true);
   const [detailErr, setDetailErr] = useState("");
- 
+
   function openDetail(b: Booking) {
     setDetailBooking(b);
     const baseCents = b.paid_amount_cents ?? b.total_amount_cents ?? null;
@@ -328,21 +327,21 @@ export default function CalendarioAdmin() {
     setDetailErr("");
     setDetailOpen(true);
   }
- 
+
   async function markPaid() {
     if (!detailBooking) return;
- 
+
     setDetailErr("");
     const normalized = (payAmount || "").replace(",", ".").trim();
     const num = Number(normalized);
- 
+
     if (!isFinite(num) || num <= 0) {
       setDetailErr("Importo non valido");
       return;
     }
- 
+
     const cents = Math.round(num * 100);
- 
+
     try {
       const r = await fetch("/api/admin/mark-paid", {
         method: "POST",
@@ -355,22 +354,22 @@ export default function CalendarioAdmin() {
           updateTotalAlso: updateTotalAlso,
         }),
       });
- 
+
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore pagamento");
- 
+
       setDetailOpen(false);
       await load();
     } catch (e: any) {
       setDetailErr(e.message || "Errore pagamento");
     }
   }
- 
+
   async function cancelBooking() {
     if (!detailBooking) return;
- 
+
     const reason = prompt("Motivo disdetta (opzionale):") ?? "";
- 
+
     try {
       const r = await fetch("/api/admin/cancel-booking", {
         method: "POST",
@@ -380,30 +379,30 @@ export default function CalendarioAdmin() {
           reason: reason,
         }),
       });
- 
+
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore disdetta");
- 
+
       setDetailOpen(false);
       await load();
     } catch (e: any) {
       setDetailErr(e.message || "Errore disdetta");
     }
   }
- 
+
   const [blockDetailOpen, setBlockDetailOpen] = useState(false);
   const [detailBlock, setDetailBlock] = useState<Block | null>(null);
   const [blockErr, setBlockErr] = useState("");
- 
+
   function openBlockDetail(bl: Block) {
     setDetailBlock(bl);
     setBlockErr("");
     setBlockDetailOpen(true);
   }
- 
+
   async function deleteBlock() {
     if (!detailBlock) return;
- 
+
     try {
       const r = await fetch("/api/admin/delete-block", {
         method: "POST",
@@ -412,21 +411,21 @@ export default function CalendarioAdmin() {
           blockId: detailBlock.id,
         }),
       });
- 
+
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore eliminazione blocco");
- 
+
       setBlockDetailOpen(false);
       await load();
     } catch (e: any) {
       setBlockErr(e.message || "Errore eliminazione blocco");
     }
   }
- 
+
   const [draggingBookingId, setDraggingBookingId] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [didMove, setDidMove] = useState(false);
- 
+
   useEffect(() => {
     function stopDrag() {
       setDraggingBookingId(null);
@@ -439,17 +438,17 @@ export default function CalendarioAdmin() {
       window.removeEventListener("pointercancel", stopDrag);
     };
   }, []);
- 
+
   async function moveBooking(bookingId: string, resourceId: string, startT: number) {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) return;
- 
+
     const durationMs =
       new Date(booking.end_ts).getTime() - new Date(booking.start_ts).getTime();
- 
+
     const startISO = new Date(startT).toISOString();
     const endISO = new Date(startT + durationMs).toISOString();
- 
+
     try {
       const r = await fetch("/api/admin/move-booking", {
         method: "POST",
@@ -461,10 +460,10 @@ export default function CalendarioAdmin() {
           endISO,
         }),
       });
- 
+
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore spostamento prenotazione");
- 
+
       setDidMove(true);
       await load();
     } catch (e: any) {
@@ -475,20 +474,20 @@ export default function CalendarioAdmin() {
       setTimeout(() => setDidMove(false), 150);
     }
   }
- 
+
   const nowLineTop = useMemo(() => {
     const now = Date.now();
     if (now < dayStart || now > dayEnd) return null;
     return topPx(now);
   }, [dayStart, dayEnd]);
- 
+
   const minWidth = timeColW + orderedResources.length * colW;
- 
+
   return (
     <div style={{ padding: 12, background: "#f3f4f6", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1700, margin: "0 auto" }}>
         <img src="/logo.png" style={{ height: 64, marginBottom: 12 }} />
- 
+
         <div
           style={{
             display: "flex",
@@ -498,7 +497,7 @@ export default function CalendarioAdmin() {
           }}
         >
           <h1 style={{ fontSize: 22, fontWeight: 900, marginRight: 10 }}>Calendario</h1>
- 
+
           <label>
             <div style={{ fontWeight: 800, fontSize: 11, opacity: 0.7 }}>Data</div>
             <input
@@ -513,7 +512,7 @@ export default function CalendarioAdmin() {
               }}
             />
           </label>
- 
+
           <button
             onClick={load}
             disabled={loading}
@@ -529,7 +528,7 @@ export default function CalendarioAdmin() {
           >
             Aggiorna
           </button>
- 
+
           <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
             <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e5e7eb", fontWeight: 800, fontSize: 13 }}>
               ✅ Prenotato
@@ -542,11 +541,11 @@ export default function CalendarioAdmin() {
             </span>
           </div>
         </div>
- 
+
         <div style={{ marginTop: 8, opacity: 0.7, fontSize: 11 }}>
           Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} - {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Tieni premuto su una prenotazione e trascinala su un altro slot.
         </div>
- 
+
         {msg && (
           <div
             style={{
@@ -560,7 +559,7 @@ export default function CalendarioAdmin() {
             {msg}
           </div>
         )}
- 
+
         <div
           style={{
             marginTop: 14,
@@ -601,13 +600,14 @@ export default function CalendarioAdmin() {
               </div>
             ))}
           </div>
- 
+
           <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
             <div style={{ borderRight: "1px solid #cbd5e1", background: "#f3f4f6" }}>
               {timeRows.map((t, i) => {
                 const minutes = new Date(t.t).getMinutes();
                 const isFullHour = minutes === 0;
- 
+                const hourBand = Math.floor(i / 2) % 2 === 0;
+
                 return (
                   <div
                     key={i}
@@ -617,7 +617,7 @@ export default function CalendarioAdmin() {
                       fontSize: 11,
                       fontWeight: isFullHour ? 900 : 700,
                       color: isFullHour ? "#111827" : "#4b5563",
-                      background: i % 2 === 0 ? "#f9fafb" : "#f3f4f6",
+                      background: hourBand ? "#ffffff" : "#eef2f7",
                       borderBottom: isFullHour ? "2px solid #cbd5e1" : "1px solid #e5e7eb",
                     }}
                   >
@@ -626,7 +626,7 @@ export default function CalendarioAdmin() {
                 );
               })}
             </div>
- 
+
             <div style={{ position: "relative" }}>
               <div style={{ display: "grid", gridTemplateColumns: `repeat(${orderedResources.length}, ${colW}px)` }}>
                 {orderedResources.map((r) => (
@@ -644,7 +644,8 @@ export default function CalendarioAdmin() {
                       const isDragOver = dragOverKey === slotKey;
                       const minutes = new Date(tr.t).getMinutes();
                       const isFullHour = minutes === 0;
- 
+                      const hourBand = Math.floor(idx / 2) % 2 === 0;
+
                       return (
                         <div
                           key={idx}
@@ -669,9 +670,9 @@ export default function CalendarioAdmin() {
                             zIndex: 1,
                             background: isDragOver
                               ? "#dbeafe"
-                              : idx % 2 === 0
-                              ? "#f3f4f6"
-                              : "#ffffff",
+                              : hourBand
+                              ? "#ffffff"
+                              : "#eef2f7",
                             outline: isDragOver ? "2px dashed #1e90ff" : "none",
                             outlineOffset: -2,
                           }}
@@ -679,13 +680,13 @@ export default function CalendarioAdmin() {
                         />
                       );
                     })}
- 
+
                     {(itemsByRes.get(r.id) ?? []).map((it: any) => {
                       const top = clamp(topPx(it.start), 0, gridH);
                       const h = clamp(heightPx(it.start, it.end), 28, gridH - top);
                       const isBlock = it.type === "BLOCK";
                       const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
- 
+
                       return (
                         <div
                           key={it.id}
@@ -699,13 +700,13 @@ export default function CalendarioAdmin() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
- 
+
                             if (didMove) return;
- 
+
                             if (it.type === "BOOKING") {
                               openDetail(it.booking);
                             }
- 
+
                             if (it.type === "BLOCK") {
                               openBlockDetail(it.block);
                             }
@@ -749,20 +750,22 @@ export default function CalendarioAdmin() {
                               style={{
                                 fontWeight: 950,
                                 fontSize: 12,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                maxWidth: 90,
+                                lineHeight: 1.1,
+                                whiteSpace: "normal",
+                                wordBreak: "break-word",
+                                flex: 1,
+                                marginRight: 4,
                               }}
                             >
                               {it.title}
                             </div>
- 
+
                             <div
                               style={{
                                 display: "flex",
                                 alignItems: "center",
                                 gap: 4,
+                                flexShrink: 0,
                               }}
                             >
                               <div
@@ -778,7 +781,7 @@ export default function CalendarioAdmin() {
                               >
                                 {it.badge}
                               </div>
- 
+
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -800,18 +803,21 @@ export default function CalendarioAdmin() {
                               </button>
                             </div>
                           </div>
- 
+
                           <div
                             style={{
                               marginTop: 6,
                               fontSize: 10,
                               fontWeight: 800,
                               opacity: 0.9,
+                              lineHeight: 1.15,
+                              whiteSpace: "normal",
+                              wordBreak: "break-word",
                             }}
                           >
                             {it.subtitle}
                           </div>
- 
+
                           {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
                             <div
                               style={{
@@ -819,6 +825,9 @@ export default function CalendarioAdmin() {
                                 fontSize: 10,
                                 fontWeight: 950,
                                 pointerEvents: "none",
+                                lineHeight: 1.15,
+                                whiteSpace: "normal",
+                                wordBreak: "break-word",
                               }}
                             >
                               Totale: {eurFromCents(it.booking.total_amount_cents)}
@@ -840,7 +849,7 @@ export default function CalendarioAdmin() {
                   </div>
                 ))}
               </div>
- 
+
               {nowLineTop !== null && (
                 <div
                   style={{
@@ -857,7 +866,7 @@ export default function CalendarioAdmin() {
             </div>
           </div>
         </div>
- 
+
         {newOpen && (
           <div
             onClick={() => setNewOpen(false)}
@@ -887,7 +896,7 @@ export default function CalendarioAdmin() {
               <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
                 Orario: {hhmm(newStartISO)} • Data: {date}
               </div>
- 
+
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 <label>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Durata</div>
@@ -909,7 +918,7 @@ export default function CalendarioAdmin() {
                     <option value={600}>10 ore</option>
                   </select>
                 </label>
- 
+
                 <label>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Nome</div>
                   <input
@@ -918,7 +927,7 @@ export default function CalendarioAdmin() {
                     style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   />
                 </label>
- 
+
                 <label>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Telefono</div>
                   <input
@@ -927,7 +936,7 @@ export default function CalendarioAdmin() {
                     style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
                   />
                 </label>
- 
+
                 {newErr && (
                   <div
                     style={{
@@ -940,7 +949,7 @@ export default function CalendarioAdmin() {
                     {newErr}
                   </div>
                 )}
- 
+
                 <div
                   style={{
                     display: "flex",
@@ -964,7 +973,7 @@ export default function CalendarioAdmin() {
                   >
                     Blocca campo
                   </button>
- 
+
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <button
                       onClick={() => setNewOpen(false)}
@@ -978,7 +987,7 @@ export default function CalendarioAdmin() {
                     >
                       Chiudi
                     </button>
- 
+
                     <button
                       onClick={submitNewBooking}
                       style={{
@@ -998,7 +1007,7 @@ export default function CalendarioAdmin() {
             </div>
           </div>
         )}
- 
+
         {detailOpen && detailBooking && (
           <div
             onClick={() => setDetailOpen(false)}
@@ -1025,7 +1034,7 @@ export default function CalendarioAdmin() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 950 }}>Prenotazione</div>
- 
+
               <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
                 <div><b>Nome:</b> {detailBooking.user_name}</div>
                 <div><b>Telefono:</b> {detailBooking.user_phone}</div>
@@ -1034,10 +1043,10 @@ export default function CalendarioAdmin() {
                 <div><b>Stato pagamento:</b> {detailBooking.paid_at ? "Pagata" : "Da pagare"}</div>
                 {detailBooking.payment_note ? <div><b>Nota:</b> {detailBooking.payment_note}</div> : null}
               </div>
- 
+
               <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
                 <div style={{ fontWeight: 950 }}>Segna pagato</div>
- 
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
                   <label>
                     <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Importo (€)</div>
@@ -1048,7 +1057,7 @@ export default function CalendarioAdmin() {
                       placeholder="es. 60,00"
                     />
                   </label>
- 
+
                   <label>
                     <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Metodo</div>
                     <select
@@ -1061,7 +1070,7 @@ export default function CalendarioAdmin() {
                     </select>
                   </label>
                 </div>
- 
+
                 <label style={{ marginTop: 10, display: "block" }}>
                   <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Nota pagamento</div>
                   <input
@@ -1071,7 +1080,7 @@ export default function CalendarioAdmin() {
                     placeholder="es. sconto, saldo, promo..."
                   />
                 </label>
- 
+
                 <label style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
                   <input
                     type="checkbox"
@@ -1082,7 +1091,7 @@ export default function CalendarioAdmin() {
                     Aggiorna anche il totale prenotazione con l’importo incassato
                   </span>
                 </label>
- 
+
                 {detailErr && (
                   <div
                     style={{
@@ -1096,7 +1105,7 @@ export default function CalendarioAdmin() {
                     {detailErr}
                   </div>
                 )}
- 
+
                 <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 14, flexWrap: "wrap" }}>
                   <button
                     onClick={cancelBooking}
@@ -1110,7 +1119,7 @@ export default function CalendarioAdmin() {
                   >
                     Disdici prenotazione
                   </button>
- 
+
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     <a
                       href={`/admin/ricevuta/${detailBooking.id}`}
@@ -1129,7 +1138,7 @@ export default function CalendarioAdmin() {
                     >
                       Ricevuta
                     </a>
- 
+
                     <button
                       onClick={markPaid}
                       style={{
@@ -1145,7 +1154,7 @@ export default function CalendarioAdmin() {
                     </button>
                   </div>
                 </div>
- 
+
                 <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
                   Tip: “Ricevuta” apre la pagina stampabile. Poi fai Stampa → Salva PDF.
                 </div>
@@ -1153,7 +1162,7 @@ export default function CalendarioAdmin() {
             </div>
           </div>
         )}
- 
+
         {blockDetailOpen && detailBlock && (
           <div
             onClick={() => setBlockDetailOpen(false)}
@@ -1180,12 +1189,12 @@ export default function CalendarioAdmin() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 950 }}>Blocco campo</div>
- 
+
               <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 13 }}>
                 <div><b>Orario:</b> {hhmm(detailBlock.start_ts)}-{hhmm(detailBlock.end_ts)}</div>
                 <div><b>Motivo:</b> {detailBlock.note || "-"}</div>
               </div>
- 
+
               {blockErr && (
                 <div
                   style={{
@@ -1199,7 +1208,7 @@ export default function CalendarioAdmin() {
                   {blockErr}
                 </div>
               )}
- 
+
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
                 <button
                   onClick={() => setBlockDetailOpen(false)}
@@ -1213,7 +1222,7 @@ export default function CalendarioAdmin() {
                 >
                   Chiudi
                 </button>
- 
+
                 <button
                   onClick={deleteBlock}
                   style={{
