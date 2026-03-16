@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
@@ -7,56 +7,61 @@ export async function GET(req: Request) {
     const date = searchParams.get("date");
 
     if (!date) {
-      return NextResponse.json({ error: "Missing date" }, { status: 400 });
+      return NextResponse.json({ error: "Data mancante" }, { status: 400 });
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const start = new Date(`${date}T00:00:00.000Z`);
+    const end = new Date(`${date}T23:59:59.999Z`);
 
-    const start = date + "T00:00:00";
-    const end = date + "T23:59:59";
+    const [{ data: resources, error: rErr }, { data: bookings, error: bErr }, { data: blocks, error: blErr }] =
+      await Promise.all([
+        supabase
+          .from("resources")
+          .select("*")
+          .order("name", { ascending: true }),
 
-    const resourcesRes = await supabase
-      .from("resources")
-      .select("id,name,is_active,is_public")
-      .order("name", { ascending: true });
+        supabase
+          .from("bookings")
+          .select(`
+            id,
+            resource_id,
+            user_name,
+            user_phone,
+            start_ts,
+            end_ts,
+            status,
+            pay_mode,
+            total_amount_cents,
+            paid_amount_cents,
+            paid_method,
+            paid_at,
+            payment_note,
+            sport
+          `)
+          .gte("start_ts", start.toISOString())
+          .lte("start_ts", end.toISOString())
+          .order("start_ts", { ascending: true }),
 
-    if (resourcesRes.error) {
-      throw resourcesRes.error;
-    }
+        supabase
+          .from("admin_blocks")
+          .select("*")
+          .gte("start_ts", start.toISOString())
+          .lte("start_ts", end.toISOString())
+          .order("start_ts", { ascending: true }),
+      ]);
 
-    const bookingsRes = await supabase
-      .from("bookings")
-      .select("*")
-      .gte("start_ts", start)
-      .lt("start_ts", end)
-      .order("start_ts", { ascending: true });
-
-    if (bookingsRes.error) {
-      throw bookingsRes.error;
-    }
-
-    const blocksRes = await supabase
-      .from("admin_blocks")
-      .select("*")
-      .gte("start_ts", start)
-      .lt("start_ts", end)
-      .order("start_ts", { ascending: true });
-
-    if (blocksRes.error) {
-      throw blocksRes.error;
-    }
+    if (rErr) return NextResponse.json({ error: rErr.message }, { status: 500 });
+    if (bErr) return NextResponse.json({ error: bErr.message }, { status: 500 });
+    if (blErr) return NextResponse.json({ error: blErr.message }, { status: 500 });
 
     return NextResponse.json({
-      resources: resourcesRes.data ?? [],
-      bookings: bookingsRes.data ?? [],
-      blocks: blocksRes.data ?? [],
+      resources: resources ?? [],
+      bookings: bookings ?? [],
+      blocks: blocks ?? [],
     });
-  } catch (err: any) {
+  } catch (e: any) {
     return NextResponse.json(
-      { error: err?.message || "server error" },
+      { error: e.message || "Errore caricamento giorno" },
       { status: 500 }
     );
   }
