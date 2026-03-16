@@ -1,7 +1,7 @@
 {
-  "name": "Centro Sportivo Comun Nuovo",
-  "short_name": "CS Comun Nuovo",
-  "description": "Prenotazione campi online - Il Barettino",
+  "name": "CsComunNuovo",
+  "short_name": "CsComunNuovo",
+  "description": "Centro Sportivo Comun Nuovo",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -19,4 +19,3 @@
     }
   ]
 }
-
