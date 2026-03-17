@@ -16,13 +16,16 @@ const PRICE_PER_HOUR_CENTS: Record<string, number> = {
 };
 
 function calcTotalCents(resourceName: string, minutes: number, sport?: string | null) {
-  if (resourceName === "Tendone") {
-    if (sport === "TENNIS") return Math.round(1500 * (minutes / 60));
-    return Math.round(5000 * (minutes / 60));
+  const hours = minutes / 60;
+
+  if ((resourceName || "").trim().toLowerCase().includes("tendone")) {
+    if (sport === "TENNIS") return Math.round(hours * 15 * 100);
+    if (sport === "CALCETTO") return Math.round(hours * 50 * 100);
+    return Math.round(5000 * hours);
   }
 
   const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
-  return Math.round(perHour * (minutes / 60));
+  return Math.round(perHour * hours);
 }
 
 export async function POST(req: Request) {
@@ -56,8 +59,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Risorsa non attiva" }, { status: 400 });
     }
 
+    const isTendone = (resRow.name || "").trim().toLowerCase().includes("tendone");
+
     const normalizedSport =
-      resRow.name === "Tendone"
+      isTendone
         ? body.sport === "TENNIS"
           ? "TENNIS"
           : "CALCETTO"
@@ -65,20 +70,13 @@ export async function POST(req: Request) {
 
     const totalCents = calcTotalCents(resRow.name, minutes, normalizedSport);
 
-    const paymentNote =
-      normalizedSport != null
-        ? `SPORT:${normalizedSport}`
-        : null;
-
     const updatePayload: Record<string, any> = {
       resource_id: body.resourceId,
       start_ts: start.toISOString(),
       end_ts: end.toISOString(),
       total_amount_cents: totalCents,
-      payment_note: paymentNote,
     };
 
-    // Se hai la colonna sport, la salva anche lì
     updatePayload.sport = normalizedSport;
 
     const { data, error } = await supabase
