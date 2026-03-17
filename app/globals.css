@@ -17,20 +17,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f172a;
-    --foreground: #e5e7eb;
-    --card-bg: #111827;
-    --card-text: #f3f4f6;
-    --input-bg: #1f2937;
-    --input-text: #f9fafb;
-    --border-color: #374151;
-  }
-}
-
+/* Forza tema chiaro anche se iPhone è in dark mode */
 html {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {
@@ -39,7 +28,7 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* forza input e select leggibili anche su iPhone dark mode */
+/* input e select sempre leggibili */
 input,
 select,
 textarea,
@@ -52,8 +41,10 @@ select,
 textarea {
   background-color: var(--input-bg) !important;
   color: var(--input-text) !important;
-  border-color: var(--border-color) !important;
+  border: 1px solid var(--border-color) !important;
   -webkit-text-fill-color: var(--input-text) !important;
+  appearance: none;
+  -webkit-appearance: none;
   opacity: 1 !important;
 }
 
@@ -66,11 +57,5 @@ textarea::placeholder {
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  input[type="date"]::-webkit-calendar-picker-indicator,
-  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-  }
+  opacity: 1;
 }
