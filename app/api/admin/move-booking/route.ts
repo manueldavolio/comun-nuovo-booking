@@ -6,7 +6,6 @@ type Body = {
   resourceId: string;
   startISO: string;
   endISO: string;
-  sport?: "CALCETTO" | "TENNIS" | null;
 };
 
 const PRICE_PER_HOUR_CENTS: Record<string, number> = {
@@ -15,17 +14,18 @@ const PRICE_PER_HOUR_CENTS: Record<string, number> = {
   Sintetico: 5000,
 };
 
-function calcTotalCents(resourceName: string, minutes: number, sport?: string | null) {
-  const hours = minutes / 60;
-
-  if ((resourceName || "").trim().toLowerCase().includes("tendone")) {
-    if (sport === "TENNIS") return Math.round(hours * 15 * 100);
-    if (sport === "CALCETTO") return Math.round(hours * 50 * 100);
-    return Math.round(5000 * hours);
+function calcTotalCents(
+  resourceName: string,
+  minutes: number,
+  sport?: "CALCETTO" | "TENNIS" | null
+) {
+  if (resourceName === "Tendone") {
+    if (sport === "TENNIS") return Math.round(1500 * (minutes / 60));
+    return Math.round(5000 * (minutes / 60));
   }
 
   const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
-  return Math.round(perHour * hours);
+  return Math.round(perHour * (minutes / 60));
 }
 
 export async function POST(req: Request) {
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
 
     const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
 
+    // campo destinazione
     const { data: resRow, error: rErr } = await supabase
       .from("resources")
       .select("id, name, is_active")
@@ -59,25 +60,29 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Risorsa non attiva" }, { status: 400 });
     }
 
-    const isTendone = (resRow.name || "").trim().toLowerCase().includes("tendone");
+    // recupero booking attuale per sapere sport esistente
+    const { data: oldBooking } = await supabase
+      .from("bookings")
+      .select("sport")
+      .eq("id", body.bookingId)
+      .single();
 
-    const normalizedSport =
-      isTendone
-        ? body.sport === "TENNIS"
-          ? "TENNIS"
-          : "CALCETTO"
-        : null;
+    let sport: "CALCETTO" | "TENNIS" | null = null;
 
-    const totalCents = calcTotalCents(resRow.name, minutes, normalizedSport);
+    if (resRow.name === "Tendone") {
+      sport = oldBooking?.sport === "TENNIS" ? "TENNIS" : "CALCETTO";
+    }
 
-    const updatePayload: Record<string, any> = {
+    const totalCents = calcTotalCents(resRow.name, minutes, sport);
+
+    const updatePayload: any = {
       resource_id: body.resourceId,
       start_ts: start.toISOString(),
       end_ts: end.toISOString(),
       total_amount_cents: totalCents,
+      sport: sport,
+      payment_note: sport ? `SPORT:${sport}` : null,
     };
-
-    updatePayload.sport = normalizedSport;
 
     const { data, error } = await supabase
       .from("bookings")
@@ -97,7 +102,7 @@ export async function POST(req: Request) {
       ok: true,
       booking: data,
       totalCents,
-      sport: normalizedSport,
+      sport,
     });
   } catch (e: any) {
     return NextResponse.json(
