@@ -22,7 +22,7 @@ const PRICE_PER_HOUR_CENTS: Record<string, number> = {
 function calcTotalCents(resourceName: string, minutes: number, sport?: string | null) {
   const hours = minutes / 60;
 
-  if (resourceName === "Tendone") {
+  if ((resourceName || "").trim().toLowerCase().includes("tendone")) {
     if (sport === "TENNIS") return Math.round(hours * 15 * 100);
     if (sport === "CALCETTO") return Math.round(hours * 50 * 100);
     return Math.round(5000 * hours);
@@ -188,8 +188,10 @@ export async function POST(req: Request) {
     );
   }
 
+  const isTendone = (resRow.name || "").trim().toLowerCase().includes("tendone");
+
   const normalizedSport =
-    resRow.name === "Tendone"
+    isTendone
       ? body.sport === "TENNIS"
         ? "TENNIS"
         : "CALCETTO"
@@ -211,7 +213,6 @@ export async function POST(req: Request) {
     source: body.source ?? null,
   };
 
-  // Se la colonna esiste nel DB, salva anche lo sport
   insertPayload.sport = normalizedSport;
 
   const { data, error } = await supabase
