@@ -344,7 +344,7 @@ export default function CalendarioAdmin() {
           userName: newName,
           userPhone: newPhone,
           payMode: "BAR",
-          sport: selectedNewResource?.name === "Tendone" ? newSport : null,
+          sport: newSport,
           // NOTE: per salvare davvero lo sport/prezzo lato backend
           // servono modifiche anche alla route create-booking.
         }),

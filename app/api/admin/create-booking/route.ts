@@ -20,13 +20,16 @@ const PRICE_PER_HOUR_CENTS: Record<string, number> = {
 };
 
 function calcTotalCents(resourceName: string, minutes: number, sport?: string | null) {
+  const hours = minutes / 60;
+
   if (resourceName === "Tendone") {
-    if (sport === "TENNIS") return Math.round(1500 * (minutes / 60));
-    return Math.round(5000 * (minutes / 60));
+    if (sport === "TENNIS") return Math.round(hours * 15 * 100);
+    if (sport === "CALCETTO") return Math.round(hours * 50 * 100);
+    return Math.round(5000 * hours);
   }
 
   const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
-  return Math.round(perHour * (minutes / 60));
+  return Math.round(perHour * hours);
 }
 
 function normalizePhoneForWhatsApp(phone: string) {
@@ -194,11 +197,6 @@ export async function POST(req: Request) {
 
   const totalCents = calcTotalCents(resRow.name, body.minutes, normalizedSport);
 
-  const paymentNote =
-    normalizedSport != null
-      ? `SPORT:${normalizedSport}`
-      : null;
-
   const insertPayload: Record<string, any> = {
     resource_id: body.resourceId,
     user_name: body.userName,
@@ -211,11 +209,9 @@ export async function POST(req: Request) {
     deposit_amount_cents: 500,
     currency: "eur",
     source: body.source ?? null,
-    payment_note: paymentNote,
   };
 
-  // Se nel database hai aggiunto la colonna "sport", la salva.
-  // Se non esiste, togli pure questa riga.
+  // Se la colonna esiste nel DB, salva anche lo sport
   insertPayload.sport = normalizedSport;
 
   const { data, error } = await supabase
