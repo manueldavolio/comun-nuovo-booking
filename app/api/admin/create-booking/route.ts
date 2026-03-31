@@ -19,7 +19,11 @@ const PRICE_PER_HOUR_CENTS: Record<string, number> = {
   Sintetico: 5000,
 };
 
-function calcTotalCents(resourceName: string, minutes: number, sport?: string | null) {
+function calcTotalCents(
+  resourceName: string,
+  minutes: number,
+  sport?: string | null
+) {
   const hours = minutes / 60;
 
   if ((resourceName || "").trim().toLowerCase().includes("tendone")) {
@@ -49,9 +53,15 @@ function formatTimeLabel(startISO: string, endISO: string) {
 
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  return `${pad(start.getHours())}:${pad(start.getMinutes())} - ${pad(
-    end.getHours()
-  )}:${pad(end.getMinutes())}`;
+  const dateLabel = `${pad(start.getDate())}/${pad(
+    start.getMonth() + 1
+  )}/${start.getFullYear()}`;
+
+  const timeLabel = `${pad(start.getHours())}:${pad(
+    start.getMinutes()
+  )} - ${pad(end.getHours())}:${pad(end.getMinutes())}`;
+
+  return `${dateLabel} • ${timeLabel}`;
 }
 
 async function sendWhatsAppBookingConfirmation(params: {
@@ -190,12 +200,11 @@ export async function POST(req: Request) {
 
   const isTendone = (resRow.name || "").trim().toLowerCase().includes("tendone");
 
-  const normalizedSport =
-    isTendone
-      ? body.sport === "TENNIS"
-        ? "TENNIS"
-        : "CALCETTO"
-      : null;
+  const normalizedSport = isTendone
+    ? body.sport === "TENNIS"
+      ? "TENNIS"
+      : "CALCETTO"
+    : null;
 
   const totalCents = calcTotalCents(resRow.name, body.minutes, normalizedSport);
 
