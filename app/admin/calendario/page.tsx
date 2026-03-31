@@ -839,14 +839,14 @@ export default function CalendarioAdmin() {
                 minWidth: minWidth,
               }}
             >
-              <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #cbd5e1" }} />
+              <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #94a3b8" }} />
               {orderedResources.map((r) => (
                 <div
                   key={r.id}
                   style={{
                     padding: 10,
                     fontWeight: 900,
-                    borderRight: "1px solid #cbd5e1",
+                    borderRight: "1px solid #94a3b8",
                     whiteSpace: "nowrap",
                     fontSize: 14,
                   }}
@@ -857,7 +857,7 @@ export default function CalendarioAdmin() {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
-              <div style={{ borderRight: "1px solid #cbd5e1", background: "#f3f4f6" }}>
+              <div style={{ borderRight: "3px solid #cbd5e1", background: "#94a3b8" }}>
                 {timeRows.map((t, i) => {
                   const minutes = new Date(t.t).getMinutes();
                   const isFullHour = minutes === 0;
@@ -890,7 +890,7 @@ export default function CalendarioAdmin() {
                       style={{
                         position: "relative",
                         height: gridH,
-                        borderRight: "1px solid #d1d5db",
+                        borderRight: "1px solid #94a3b8",
                         background: "#f9fafb",
                       }}
                     >
