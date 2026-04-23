@@ -389,10 +389,11 @@ export default function CalendarioAdmin() {
       return;
     }
     try {
-      const endISO = new Date(
-        new Date(newStartISO).getTime() + newMinutes * 60 * 1000
-      ).toISOString();
-      if (!isWithinSchedule(newStartISO, endISO)) {
+      const startDate = new Date(newStartISO);
+      const endDate = new Date(startDate.getTime() + newMinutes * 60 * 1000);
+      const startISO = startDate.toISOString();
+      const endISO = endDate.toISOString();
+      if (!isWithinSchedule(startISO, endISO)) {
         setNewErr("Orario non valido: l'ultima fascia disponibile termina alle 23:00.");
         return;
       }
@@ -402,7 +403,7 @@ export default function CalendarioAdmin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           resourceId: newResourceId,
-          startISO: newStartISO,
+          startISO,
           endISO,
           minutes: newMinutes,
           userName: newName,
@@ -436,10 +437,11 @@ export default function CalendarioAdmin() {
       const reason = prompt("Motivo blocco campo (es. Allenamento, Manutenzione, Evento)");
       if (!reason) return;
 
-      const endISO = new Date(
-        new Date(newStartISO).getTime() + newMinutes * 60 * 1000
-      ).toISOString();
-      if (!isWithinSchedule(newStartISO, endISO)) {
+      const startDate = new Date(newStartISO);
+      const endDate = new Date(startDate.getTime() + newMinutes * 60 * 1000);
+      const startISO = startDate.toISOString();
+      const endISO = endDate.toISOString();
+      if (!isWithinSchedule(startISO, endISO)) {
         setNewErr("Orario non valido: i blocchi devono restare tra 09:00 e 23:00.");
         return;
       }
@@ -449,7 +451,7 @@ export default function CalendarioAdmin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           resource_id: newResourceId,
-          start_ts: newStartISO,
+          start_ts: startISO,
           end_ts: endISO,
           reason,
         }),

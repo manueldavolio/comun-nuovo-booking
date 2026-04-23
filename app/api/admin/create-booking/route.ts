@@ -18,6 +18,7 @@ const PRICE_PER_HOUR_CENTS: Record<string, number> = {
   Tendone: 5000,
   Sintetico: 5000,
 };
+const CENTER_TIME_ZONE = "Europe/Rome";
 
 function calcTotalCents(
   resourceName: string,
@@ -50,30 +51,54 @@ function normalizePhoneForWhatsApp(phone: string) {
 function formatTimeLabel(startISO: string, endISO: string) {
   const start = new Date(startISO);
   const end = new Date(endISO);
+  const startParts = getCenterDateParts(start);
+  const endParts = getCenterDateParts(end);
 
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  const dateLabel = `${pad(start.getDate())}/${pad(
-    start.getMonth() + 1
-  )}/${start.getFullYear()}`;
-
-  const timeLabel = `${pad(start.getHours())}:${pad(
-    start.getMinutes()
-  )} - ${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  const dateLabel = `${startParts.day}/${startParts.month}/${startParts.year}`;
+  const timeLabel = `${startParts.hour}:${startParts.minute} - ${endParts.hour}:${endParts.minute}`;
 
   return `${dateLabel} • ${timeLabel}`;
+}
+
+function getCenterDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("it-IT", {
+    timeZone: CENTER_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+  };
 }
 
 function isInsideDailyWindow(startISO: string, endISO: string) {
   const start = new Date(startISO);
   const end = new Date(endISO);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+
+  const startParts = getCenterDateParts(start);
+  const endParts = getCenterDateParts(end);
+
   const sameDay =
-    start.getUTCFullYear() === end.getUTCFullYear() &&
-    start.getUTCMonth() === end.getUTCMonth() &&
-    start.getUTCDate() === end.getUTCDate();
+    startParts.year === endParts.year &&
+    startParts.month === endParts.month &&
+    startParts.day === endParts.day;
   if (!sameDay) return false;
-  const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
-  const endMinutes = end.getUTCHours() * 60 + end.getUTCMinutes();
+
+  const startMinutes = Number(startParts.hour) * 60 + Number(startParts.minute);
+  const endMinutes = Number(endParts.hour) * 60 + Number(endParts.minute);
   return startMinutes >= 9 * 60 && endMinutes <= 23 * 60 && endMinutes > startMinutes;
 }
 
