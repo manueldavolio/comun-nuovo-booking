@@ -90,11 +90,7 @@ function eurFromCents(cents?: number | null) {
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
 }
 
-function getSchedule(dateStr: string) {
-  const d = new Date(`${dateStr}T00:00:00.000Z`);
-  const day = d.getUTCDay();
-  const isWeekend = day === 0 || day === 6;
-  if (isWeekend) return { openH: 8, openM: 0, closeH: 23, closeM: 0 };
+function getSchedule() {
   return { openH: 9, openM: 0, closeH: 23, closeM: 0 };
 }
 
@@ -112,6 +108,10 @@ function pricePreview(resourceName: string, sport: string, minutes: number) {
 }
 
 export default function CalendarioAdmin() {
+  const EVENTI_NAME = "Eventi";
+  const EVENTI_VIRTUAL_ID = "__eventi_virtual_ui__";
+  const resourceOrder = ["Palazzetto", "Tendone", "Saletta palestra", EVENTI_NAME];
+
   const [date, setDate] = useState(todayISODate());
   const [resources, setResources] = useState<Resource[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -126,24 +126,35 @@ export default function CalendarioAdmin() {
   const pinchStartZoom = useRef<number>(1);
 
   const STEP_MIN = 30;
-  const { openH, openM, closeH, closeM } = getSchedule(date);
+  const { openH, openM, closeH, closeM } = getSchedule();
 
   const baseTimeColW = 64;
-  const baseColW = 220;
-  const baseRowH = 52;
+  const baseColW = 230;
+  const baseRowH = 50;
 
   const timeColW = Math.round(baseTimeColW * zoom);
   const colW = Math.round(baseColW * zoom);
   const rowH = Math.round(baseRowH * zoom);
 
-  const resourceOrder = ["Palazzetto", "Tendone", "Saletta palestra", "Spogliatoi"];
-
   const orderedResources = useMemo(() => {
-    return [...resources].sort((a, b) => {
-      const ai = resourceOrder.indexOf(a.name);
-      const bi = resourceOrder.indexOf(b.name);
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-    });
+    const allowed = resources.filter((r) => resourceOrder.includes(r.name));
+    const baseOrdered = resourceOrder
+      .map((name) => allowed.find((r) => r.name === name))
+      .filter(Boolean) as Resource[];
+
+    const hasEventi = baseOrdered.some((r) => r.name === EVENTI_NAME);
+    if (hasEventi) return baseOrdered;
+
+    // UI fallback: mostra sempre "Eventi"; per renderlo persistente serve una resource "Eventi" nel DB.
+    return [
+      ...baseOrdered,
+      {
+        id: EVENTI_VIRTUAL_ID,
+        name: EVENTI_NAME,
+        is_active: true,
+        is_public: false,
+      },
+    ];
   }, [resources]);
 
   const dayBase = useMemo(() => new Date(`${date}T00:00:00.000Z`).getTime(), [date]);
@@ -173,7 +184,11 @@ export default function CalendarioAdmin() {
       const r = await fetch(`/api/admin/day?date=${encodeURIComponent(date)}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Errore caricamento");
-      setResources((j.resources ?? []).filter((x: any) => x.is_active));
+      setResources(
+        (j.resources ?? []).filter(
+          (x: any) => x.is_active && resourceOrder.includes(x.name)
+        )
+      );
       setBookings(j.bookings ?? []);
       setBlocks(j.blocks ?? []);
     } catch (e: any) {
@@ -306,6 +321,14 @@ export default function CalendarioAdmin() {
     return (diffMin / STEP_MIN) * rowH;
   }
 
+  function isVirtualEventiResource(resourceId: string) {
+    return resourceId === EVENTI_VIRTUAL_ID;
+  }
+
+  function getResourceName(resourceId: string) {
+    return orderedResources.find((r) => r.id === resourceId)?.name ?? "";
+  }
+
   const [newOpen, setNewOpen] = useState(false);
   const [newResourceId, setNewResourceId] = useState("");
   const [newStartISO, setNewStartISO] = useState("");
@@ -328,6 +351,12 @@ export default function CalendarioAdmin() {
 
   async function submitNewBooking() {
     setNewErr("");
+    if (isVirtualEventiResource(newResourceId)) {
+      setNewErr(
+        "La colonna Eventi è visibile in UI ma non è ancora configurata nel database. Aggiungi la resource 'Eventi' lato backend per salvare gli slot."
+      );
+      return;
+    }
     try {
       const endISO = new Date(
         new Date(newStartISO).getTime() + newMinutes * 60 * 1000
@@ -362,6 +391,12 @@ export default function CalendarioAdmin() {
 
   async function createBlock() {
     setNewErr("");
+    if (isVirtualEventiResource(newResourceId)) {
+      setNewErr(
+        "La colonna Eventi è visibile in UI ma non è ancora configurata nel database. Aggiungi la resource 'Eventi' lato backend per salvare blocchi/eventi."
+      );
+      return;
+    }
     try {
       const reason = prompt("Motivo blocco campo (es. Allenamento, Manutenzione, Evento)");
       if (!reason) return;
@@ -429,6 +464,12 @@ export default function CalendarioAdmin() {
 
   async function confirmMove() {
     if (!moveBookingState) return;
+    if (isVirtualEventiResource(moveResource)) {
+      setMoveErr(
+        "Per spostare su Eventi serve la resource 'Eventi' nel database."
+      );
+      return;
+    }
 
     try {
       const duration =
@@ -571,6 +612,12 @@ export default function CalendarioAdmin() {
   }, []);
 
   async function moveBooking(bookingId: string, resourceId: string, startT: number) {
+    if (isVirtualEventiResource(resourceId)) {
+      setMsg("Per spostare su Eventi serve la resource 'Eventi' nel database.");
+      setDraggingBookingId(null);
+      setDragOverKey(null);
+      return;
+    }
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) return;
 
@@ -613,6 +660,15 @@ export default function CalendarioAdmin() {
   }, [dayStart, dayEnd]);
 
   const minWidth = timeColW + orderedResources.length * colW;
+  const dayPaidCents = useMemo(
+    () => bookings.reduce((sum, b) => sum + (b.paid_amount_cents ?? 0), 0),
+    [bookings]
+  );
+  const dayUnpaidCount = useMemo(
+    () => bookings.filter((b) => !b.paid_at).length,
+    [bookings]
+  );
+  const dayBlocksCount = blocks.length;
 
   function handleTouchStartPinch(e: React.TouchEvent<HTMLDivElement>) {
     if (e.touches.length !== 2) return;
@@ -636,130 +692,307 @@ export default function CalendarioAdmin() {
     pinchStartDistance.current = null;
   }
 
-  const selectedNewResource = resources.find((r) => r.id === newResourceId);
+  const selectedNewResource = orderedResources.find((r) => r.id === newResourceId);
+
+  const pageBg = "linear-gradient(180deg, #f7f9fc 0%, #edf2f9 100%)";
+  const panelBg = "rgba(255,255,255,0.92)";
+  const borderColor = "#d9e2ef";
+  const softShadow = "0 10px 28px rgba(15, 23, 42, 0.08)";
+  const timeBandA = "#fcfdff";
+  const timeBandB = "#f3f7fc";
 
   return (
-    <div style={{ padding: 12, background: "#f3f4f6", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 1700, margin: "0 auto" }}>
-        <img src="/logo.png" style={{ height: 64, marginBottom: 12 }} />
-
+    <div
+      style={{
+        padding: 12,
+        minHeight: "100vh",
+        background: pageBg,
+        colorScheme: "light",
+      }}
+    >
+      <div style={{ maxWidth: 1760, margin: "0 auto" }}>
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexWrap: "wrap",
+            background: panelBg,
+            borderRadius: 22,
+            border: `1px solid ${borderColor}`,
+            boxShadow: softShadow,
+            padding: 14,
+            backdropFilter: "blur(4px)",
           }}
         >
-          <h1 style={{ fontSize: 22, fontWeight: 900, marginRight: 10 }}>Calendario</h1>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 220 }}>
+              <img src="/logo.png" style={{ height: 60, width: "auto" }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: "#4f46e5", letterSpacing: 0.2 }}>
+                  ADMIN BOOKING
+                </div>
+                <h1 style={{ fontSize: 24, fontWeight: 950, margin: "2px 0 0 0", color: "#0f172a" }}>
+                  Calendario operativo
+                </h1>
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                background: "#eef2ff",
+                border: "1px solid #c7d2fe",
+                fontSize: 12,
+                fontWeight: 900,
+                color: "#3730a3",
+              }}
+            >
+              Fascia fissa 09:00-23:00 · step 30 minuti
+            </div>
+          </div>
 
-          <label>
-            <div style={{ fontWeight: 800, fontSize: 11, opacity: 0.7 }}>Data</div>
+          <div
+            style={{
+              background: "linear-gradient(135deg, #1e3a8a 0%, #4f46e5 58%, #7c3aed 100%)",
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.18)",
+              padding: 14,
+              color: "white",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.2), 0 12px 24px rgba(79,70,229,0.24)",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.9, letterSpacing: 0.2 }}>
+              Dashboard del giorno
+            </div>
+            <div
+              style={{
+                marginTop: 10,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: 10,
+              }}
+            >
+              <div style={{ background: "rgba(255,255,255,0.14)", borderRadius: 12, padding: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.86 }}>Prenotazioni</div>
+                <div style={{ marginTop: 3, fontSize: 21, fontWeight: 950 }}>{bookings.length}</div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.14)", borderRadius: 12, padding: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.86 }}>Da pagare</div>
+                <div style={{ marginTop: 3, fontSize: 21, fontWeight: 950 }}>{dayUnpaidCount}</div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.14)", borderRadius: 12, padding: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.86 }}>Incassato oggi</div>
+                <div style={{ marginTop: 3, fontSize: 21, fontWeight: 950 }}>{eurFromCents(dayPaidCents)}</div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.14)", borderRadius: 12, padding: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.86 }}>Blocchi attivi</div>
+                <div style={{ marginTop: 3, fontSize: 21, fontWeight: 950 }}>{dayBlocksCount}</div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+              background: "linear-gradient(135deg, #ffffff 0%, #f8fbff 100%)",
+              border: `1px solid ${borderColor}`,
+              borderRadius: 16,
+              padding: 10,
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85)",
+            }}
+          >
+          <label style={{ minWidth: 170 }}>
+            <div style={{ fontWeight: 900, fontSize: 11, opacity: 0.72, color: "#334155" }}>Data</div>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
               style={{
-                padding: 10,
+                width: "100%",
+                padding: "10px 12px",
                 borderRadius: 10,
-                border: "1px solid #d1d5db",
-                background: "white",
+                border: `1px solid ${borderColor}`,
+                background: "#ffffff",
+                color: "#0f172a",
+                fontWeight: 700,
               }}
             />
           </label>
 
-          <button
-            onClick={() => setViewMode("day")}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid #d1d5db",
-              background: viewMode === "day" ? "#111" : "white",
-              color: viewMode === "day" ? "white" : "#111",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            Giorno
-          </button>
+            <button
+              onClick={() => setViewMode("day")}
+              style={{
+                padding: "10px 15px",
+                borderRadius: 12,
+                border: viewMode === "day" ? "1px solid #4338ca" : `1px solid ${borderColor}`,
+                background: viewMode === "day" ? "linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)" : "white",
+                color: viewMode === "day" ? "white" : "#0f172a",
+                fontWeight: 900,
+                cursor: "pointer",
+                boxShadow: viewMode === "day" ? "0 6px 16px rgba(79,70,229,0.28)" : "none",
+              }}
+            >
+              Giorno
+            </button>
 
-          <button
-            onClick={() => setViewMode("week")}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "1px solid #d1d5db",
-              background: viewMode === "week" ? "#111" : "white",
-              color: viewMode === "week" ? "white" : "#111",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            Settimana
-          </button>
+            <button
+              onClick={() => setViewMode("week")}
+              style={{
+                padding: "10px 15px",
+                borderRadius: 12,
+                border: viewMode === "week" ? "1px solid #4338ca" : `1px solid ${borderColor}`,
+                background: viewMode === "week" ? "linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)" : "white",
+                color: viewMode === "week" ? "white" : "#0f172a",
+                fontWeight: 900,
+                cursor: "pointer",
+                boxShadow: viewMode === "week" ? "0 6px 16px rgba(79,70,229,0.28)" : "none",
+              }}
+            >
+              Settimana
+            </button>
 
-          <button
-            onClick={() => setZoom((z) => Number(clamp(z - 0.1, 0.8, 1.5).toFixed(2)))}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #d1d5db",
-              background: "white",
-              fontWeight: 900,
-            }}
-          >
-            -
-          </button>
+            <button
+              onClick={() => setZoom((z) => Number(clamp(z - 0.1, 0.8, 1.5).toFixed(2)))}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: `1px solid ${borderColor}`,
+                background: "#ffffff",
+                color: "#334155",
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              -
+            </button>
 
-          <div style={{ fontSize: 12, fontWeight: 800, minWidth: 52, textAlign: "center" }}>
-            {Math.round(zoom * 100)}%
-          </div>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                minWidth: 62,
+                textAlign: "center",
+                color: "#334155",
+                padding: "8px 10px",
+                borderRadius: 10,
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              {Math.round(zoom * 100)}%
+            </div>
 
-          <button
-            onClick={() => setZoom((z) => Number(clamp(z + 0.1, 0.8, 1.5).toFixed(2)))}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #d1d5db",
-              background: "white",
-              fontWeight: 900,
-            }}
-          >
-            +
-          </button>
+            <button
+              onClick={() => setZoom((z) => Number(clamp(z + 0.1, 0.8, 1.5).toFixed(2)))}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: `1px solid ${borderColor}`,
+                background: "#ffffff",
+                color: "#334155",
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              +
+            </button>
 
-          <button
-            onClick={load}
-            disabled={loading}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 12,
-              border: "none",
-              background: "#111",
-              color: "white",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            Aggiorna
-          </button>
+            <button
+              onClick={load}
+              disabled={loading}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid #1d4ed8",
+                background: loading
+                  ? "linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)"
+                  : "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+                color: "white",
+                fontWeight: 900,
+                cursor: loading ? "wait" : "pointer",
+                boxShadow: "0 6px 16px rgba(37,99,235,0.28)",
+              }}
+            >
+              {loading ? "Aggiorno..." : "Aggiorna"}
+            </button>
 
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#e5e7eb", fontWeight: 800, fontSize: 13 }}>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "#e2e8f0",
+                border: "1px solid #cbd5e1",
+                fontWeight: 800,
+                fontSize: 12,
+              }}
+            >
               ✅ Prenotato
             </span>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#d9f5d9", fontWeight: 800, fontSize: 13 }}>
+            <span
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "#dcfce7",
+                border: "1px solid #86efac",
+                fontWeight: 800,
+                fontSize: 12,
+              }}
+            >
               💶 Pagata
             </span>
-            <span style={{ padding: "6px 10px", borderRadius: 999, background: "#ffe8cc", fontWeight: 800, fontSize: 13 }}>
+            <span
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "#ffedd5",
+                border: "1px solid #fdba74",
+                fontWeight: 800,
+                fontSize: 12,
+              }}
+            >
               ⛔ Blocco
             </span>
+            <span
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "#ede9fe",
+                border: "1px solid #c4b5fd",
+                fontWeight: 800,
+                fontSize: 12,
+                color: "#5b21b6",
+              }}
+            >
+              🎉 Eventi
+            </span>
+            </div>
           </div>
-        </div>
 
-        <div style={{ marginTop: 8, opacity: 0.7, fontSize: 11 }}>
-          Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} - {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Tieni premuto su una prenotazione e trascinala su un altro slot. • Pinch sul calendario per zoom.
-        </div>
+          <div
+            style={{
+              marginTop: 10,
+              opacity: 0.82,
+              fontSize: 11,
+              color: "#334155",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: 12,
+              padding: "8px 10px",
+            }}
+          >
+            Orari: {String(openH).padStart(2, "0")}:{String(openM).padStart(2, "0")} - {String(closeH).padStart(2, "0")}:{String(closeM).padStart(2, "0")} (step 30 min). • Tieni premuto su una prenotazione e trascinala su un altro slot. • Pinch sul calendario per zoom.
+          </div>
 
         {msg && (
           <div
@@ -767,8 +1000,10 @@ export default function CalendarioAdmin() {
               marginTop: 12,
               padding: 12,
               borderRadius: 12,
-              background: "#fff3f3",
-              border: "1px solid #ffd2d2",
+              background: "linear-gradient(180deg, #fff7f7 0%, #fff1f2 100%)",
+              border: "1px solid #fda4af",
+              color: "#7f1d1d",
+              fontWeight: 700,
             }}
           >
             {msg}
@@ -793,19 +1028,28 @@ export default function CalendarioAdmin() {
                 }}
                 style={{
                   textAlign: "left",
-                  background: "white",
-                  border: "1px solid #d1d5db",
-                  borderRadius: 16,
-                  padding: 14,
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+                  background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+                  border: `1px solid ${borderColor}`,
+                  borderRadius: 18,
+                  padding: 16,
+                  boxShadow: "0 10px 22px rgba(15,23,42,0.08)",
                   cursor: "pointer",
+                  transition: "transform 0.16s ease, box-shadow 0.16s ease",
                 }}
               >
-                <div style={{ fontSize: 16, fontWeight: 900 }}>{d.label}</div>
-                <div style={{ marginTop: 8, fontSize: 13 }}>Prenotazioni: <b>{d.bookingsCount}</b></div>
-                <div style={{ marginTop: 4, fontSize: 13 }}>Pagate: <b>{d.paidCount}</b></div>
-                <div style={{ marginTop: 4, fontSize: 13 }}>Da pagare: <b>{d.unpaidCount}</b></div>
-                <div style={{ marginTop: 8, fontSize: 14, fontWeight: 900 }}>
+                <div
+                  style={{
+                    height: 4,
+                    borderRadius: 999,
+                    background: "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+                    marginBottom: 10,
+                  }}
+                />
+                <div style={{ fontSize: 17, fontWeight: 900, color: "#0f172a" }}>{d.label}</div>
+                <div style={{ marginTop: 10, fontSize: 13, color: "#334155" }}>Prenotazioni: <b>{d.bookingsCount}</b></div>
+                <div style={{ marginTop: 4, fontSize: 13, color: "#334155" }}>Pagate: <b>{d.paidCount}</b></div>
+                <div style={{ marginTop: 4, fontSize: 13, color: "#334155" }}>Da pagare: <b>{d.unpaidCount}</b></div>
+                <div style={{ marginTop: 10, fontSize: 14, fontWeight: 900, color: "#1e3a8a" }}>
                   Incassato: {eurFromCents(d.totalCents)}
                 </div>
               </button>
@@ -818,13 +1062,16 @@ export default function CalendarioAdmin() {
             onTouchEnd={handleTouchEndPinch}
             style={{
               marginTop: 14,
-              border: "1px solid #d1d5db",
-              borderRadius: 16,
+              border: `1px solid ${borderColor}`,
+              borderRadius: 18,
               overflowX: "auto",
               overflowY: "hidden",
               WebkitOverflowScrolling: "touch",
               touchAction: "pan-x pan-y",
-              background: "white",
+              background: panelBg,
+              boxShadow: "0 14px 28px rgba(15,23,42,0.08)",
+              backgroundImage:
+                "radial-gradient(circle at 100% 0%, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0) 45%)",
             }}
           >
             <div
@@ -834,21 +1081,33 @@ export default function CalendarioAdmin() {
                 position: "sticky",
                 top: 0,
                 zIndex: 5,
-                background: "#e5e7eb",
-                borderBottom: "1px solid #cbd5e1",
+                background: "linear-gradient(180deg, #eff6ff 0%, #e2ecfb 100%)",
+                borderBottom: "1px solid #c7d2e5",
                 minWidth: minWidth,
               }}
             >
-              <div style={{ padding: 10, fontWeight: 900, borderRight: "1px solid #94a3b8" }} />
+              <div
+                style={{
+                  padding: 10,
+                  fontWeight: 900,
+                  borderRight: "2px solid #b6c4da",
+                  background: "rgba(255,255,255,0.55)",
+                }}
+              />
               {orderedResources.map((r) => (
                 <div
                   key={r.id}
                   style={{
-                    padding: 10,
+                    padding: "10px 12px",
                     fontWeight: 900,
-                    borderRight: "1px solid #94a3b8",
+                    borderRight: "2px solid #b6c4da",
                     whiteSpace: "nowrap",
                     fontSize: 14,
+                    color: r.name === EVENTI_NAME ? "#5b21b6" : "#0f172a",
+                    background:
+                      r.name === EVENTI_NAME
+                        ? "linear-gradient(180deg, #f3e8ff 0%, #ede9fe 100%)"
+                        : "transparent",
                   }}
                 >
                   {r.name}
@@ -857,7 +1116,7 @@ export default function CalendarioAdmin() {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
-              <div style={{ borderRight: "3px solid #cbd5e1", background: "#94a3b8" }}>
+              <div style={{ borderRight: "3px solid #c7d2e5", background: "#dfe8f6" }}>
                 {timeRows.map((t, i) => {
                   const minutes = new Date(t.t).getMinutes();
                   const isFullHour = minutes === 0;
@@ -871,9 +1130,9 @@ export default function CalendarioAdmin() {
                         padding: "12px 6px",
                         fontSize: 11,
                         fontWeight: isFullHour ? 900 : 700,
-                        color: isFullHour ? "#111827" : "#4b5563",
-                        background: hourBand ? "#ffffff" : "#eef2f7",
-                        borderBottom: isFullHour ? "2px solid #cbd5e1" : "1px solid #e5e7eb",
+                        color: isFullHour ? "#0f172a" : "#475569",
+                        background: hourBand ? timeBandA : timeBandB,
+                        borderBottom: isFullHour ? "2px solid #d2ddef" : "1px solid #e2e8f0",
                       }}
                     >
                       {t.label}
@@ -890,8 +1149,11 @@ export default function CalendarioAdmin() {
                       style={{
                         position: "relative",
                         height: gridH,
-                        borderRight: "1px solid #94a3b8",
-                        background: "#f9fafb",
+                        borderRight: "2px solid #ccd7ea",
+                        background:
+                          r.name === EVENTI_NAME
+                            ? "linear-gradient(180deg, #faf5ff 0%, #f5f3ff 100%)"
+                            : "#f9fbfe",
                       }}
                     >
                       {timeRows.map((tr, idx) => {
@@ -919,12 +1181,20 @@ export default function CalendarioAdmin() {
                             }}
                             style={{
                               height: rowH,
-                              borderBottom: isFullHour ? "2px solid #cbd5e1" : "1px solid #e5e7eb",
+                              borderBottom: isFullHour ? "2px solid #d2ddef" : "1px solid #e2e8f0",
                               cursor: draggingBookingId ? "grabbing" : "pointer",
                               position: "relative",
                               zIndex: 1,
-                              background: isDragOver ? "#dbeafe" : hourBand ? "#ffffff" : "#eef2f7",
-                              outline: isDragOver ? "2px dashed #1e90ff" : "none",
+                              background: isDragOver
+                                ? "#dbeafe"
+                                : r.name === EVENTI_NAME
+                                ? hourBand
+                                  ? "#faf5ff"
+                                  : "#f3e8ff"
+                                : hourBand
+                                ? timeBandA
+                                : timeBandB,
+                              outline: isDragOver ? "2px dashed #2563eb" : "none",
                               outlineOffset: -2,
                             }}
                             title="Clicca per inserire prenotazione o bloccare il campo"
@@ -937,19 +1207,32 @@ export default function CalendarioAdmin() {
                         const h = clamp(heightPx(it.start, it.end), 28, gridH - top);
                         const isBlock = it.type === "BLOCK";
                         const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
+                        const resourceName = getResourceName(it.resource_id);
+                        const isEventResource = resourceName === EVENTI_NAME;
 
-                        let bookingBg = "#e5e7eb";
-                        let bookingBorder = "#cfd4dc";
+                        let bookingBg = "#e2e8f0";
+                        let bookingBorder = "#cbd5e1";
+                        let badgeBg = "#f8fafc";
+                        let badgeColor = "#0f172a";
                         if (isBlock) {
-                          bookingBg = "#ffe8cc";
-                          bookingBorder = "#f1c27d";
+                          bookingBg = isEventResource ? "#fde68a" : "#ffedd5";
+                          bookingBorder = isEventResource ? "#facc15" : "#fdba74";
+                          badgeBg = "#fff7ed";
+                          badgeColor = "#9a3412";
+                        } else if (isEventResource) {
+                          bookingBg = paid ? "#ddd6fe" : "#ede9fe";
+                          bookingBorder = paid ? "#a78bfa" : "#c4b5fd";
+                          badgeBg = "#f5f3ff";
+                          badgeColor = "#5b21b6";
                         } else if (paid) {
-                          bookingBg = "#d9f5d9";
-                          bookingBorder = "#9ad19a";
-                        } else if (r.name === "Tendone" && it.sport === "TENNIS") {
+                          bookingBg = "#dcfce7";
+                          bookingBorder = "#86efac";
+                          badgeBg = "#f0fdf4";
+                          badgeColor = "#166534";
+                        } else if (resourceName === "Tendone" && it.sport === "TENNIS") {
                           bookingBg = "#dbeafe";
                           bookingBorder = "#93c5fd";
-                        } else if (r.name === "Tendone" && it.sport === "CALCETTO") {
+                        } else if (resourceName === "Tendone" && it.sport === "CALCETTO") {
                           bookingBg = "#fde68a";
                           bookingBorder = "#fbbf24";
                         }
@@ -993,7 +1276,7 @@ export default function CalendarioAdmin() {
                               touchAction: "none",
                               userSelect: "none",
                               WebkitUserSelect: "none",
-                              boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+                              boxShadow: "0 8px 18px rgba(15,23,42,0.14)",
                             }}
                           >
                             <div
@@ -1032,8 +1315,9 @@ export default function CalendarioAdmin() {
                                     fontWeight: 950,
                                     padding: "3px 6px",
                                     borderRadius: 999,
-                                    background: isBlock ? "#fff3df" : paid ? "#ecffec" : "#f6f6f6",
-                                    border: "1px solid rgba(0,0,0,0.08)",
+                                    background: badgeBg,
+                                    color: badgeColor,
+                                    border: "1px solid rgba(15,23,42,0.15)",
                                     whiteSpace: "nowrap",
                                   }}
                                 >
@@ -1052,9 +1336,10 @@ export default function CalendarioAdmin() {
                                     fontWeight: 900,
                                     padding: "3px 6px",
                                     borderRadius: 8,
-                                    border: "1px solid #ccc",
+                                    border: "1px solid #cbd5e1",
                                     background: "white",
                                     cursor: "pointer",
+                                    color: "#334155",
                                   }}
                                 >
                                   Apri
@@ -1075,6 +1360,7 @@ export default function CalendarioAdmin() {
                             >
                               {it.subtitle}
                               {it.sport ? ` • ${it.sport}` : ""}
+                              {isEventResource ? " • Evento" : ""}
                             </div>
 
                             {it.type === "BOOKING" && it.booking?.total_amount_cents != null && (
@@ -1118,14 +1404,36 @@ export default function CalendarioAdmin() {
                       top: nowLineTop,
                       height: 2,
                       background: "#1e90ff",
-                      opacity: 0.55,
+                      opacity: 0.8,
+                      boxShadow: "0 0 0 1px rgba(30,144,255,0.15)",
+                      pointerEvents: "none",
                     }}
                   />
+                )}
+                {nowLineTop !== null && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: nowLineTop - 9,
+                      left: 8,
+                      background: "#1d4ed8",
+                      color: "white",
+                      fontSize: 10,
+                      fontWeight: 900,
+                      padding: "2px 7px",
+                      borderRadius: 999,
+                      pointerEvents: "none",
+                      boxShadow: "0 6px 16px rgba(29,78,216,0.35)",
+                    }}
+                  >
+                    Ora
+                  </div>
                 )}
               </div>
             </div>
           </div>
         )}
+        </div>
 
         {newOpen && (
           <div
@@ -1133,7 +1441,7 @@ export default function CalendarioAdmin() {
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.25)",
+              background: "rgba(15,23,42,0.45)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1146,15 +1454,26 @@ export default function CalendarioAdmin() {
               style={{
                 width: 460,
                 maxWidth: "100%",
-                background: "white",
-                borderRadius: 16,
-                border: "1px solid #eee",
-                padding: 16,
+                background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+                borderRadius: 20,
+                border: `1px solid ${borderColor}`,
+                boxShadow: "0 20px 48px rgba(15,23,42,0.22)",
+                padding: 18,
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 950 }}>Nuovo slot</div>
-              <div style={{ marginTop: 6, opacity: 0.75, fontSize: 13 }}>
+              <div style={{ fontSize: 19, fontWeight: 950, color: "#0f172a" }}>Nuovo slot</div>
+              <div style={{ marginTop: 6, opacity: 0.82, fontSize: 13, color: "#334155" }}>
                 Orario: {hhmm(newStartISO)} • Data: {date}
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  color: selectedNewResource?.name === EVENTI_NAME ? "#6d28d9" : "#1d4ed8",
+                }}
+              >
+                Risorsa: {selectedNewResource?.name ?? "-"}
               </div>
 
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
@@ -1163,7 +1482,13 @@ export default function CalendarioAdmin() {
                   <select
                     value={newMinutes}
                     onChange={(e) => setNewMinutes(Number(e.target.value))}
-                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                    style={{
+                      width: "100%",
+                      padding: 10,
+                      borderRadius: 10,
+                      border: `1px solid ${borderColor}`,
+                      background: "white",
+                    }}
                   >
                     <option value={60}>1 ora</option>
                     <option value={90}>1 ora e 30</option>
@@ -1185,7 +1510,13 @@ export default function CalendarioAdmin() {
                     <select
                       value={newSport}
                       onChange={(e) => setNewSport(e.target.value as "CALCETTO" | "TENNIS")}
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                      style={{
+                        width: "100%",
+                        padding: 10,
+                        borderRadius: 10,
+                        border: `1px solid ${borderColor}`,
+                        background: "white",
+                      }}
                     >
                       <option value="CALCETTO">Calcetto - 50 €/ora</option>
                       <option value="TENNIS">Tennis - 15 €/ora</option>
@@ -1198,7 +1529,13 @@ export default function CalendarioAdmin() {
                   <input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                    style={{
+                      width: "100%",
+                      padding: 10,
+                      borderRadius: 10,
+                      border: `1px solid ${borderColor}`,
+                      background: "white",
+                    }}
                   />
                 </label>
 
@@ -1207,7 +1544,13 @@ export default function CalendarioAdmin() {
                   <input
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
-                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                    style={{
+                      width: "100%",
+                      padding: 10,
+                      borderRadius: 10,
+                      border: `1px solid ${borderColor}`,
+                      background: "white",
+                    }}
                   />
                 </label>
 
@@ -1215,10 +1558,11 @@ export default function CalendarioAdmin() {
                   style={{
                     padding: 10,
                     borderRadius: 12,
-                    background: "#f8fafc",
-                    border: "1px solid #e5e7eb",
+                    background: "#f8fbff",
+                    border: `1px solid ${borderColor}`,
                     fontSize: 13,
                     fontWeight: 800,
+                    color: "#0f172a",
                   }}
                 >
                   Stima prezzo:{" "}
@@ -1238,8 +1582,10 @@ export default function CalendarioAdmin() {
                     style={{
                       padding: 10,
                       borderRadius: 12,
-                      background: "#fff3f3",
-                      border: "1px solid #ffd2d2",
+                      background: "#fff7f7",
+                      border: "1px solid #ffc7c7",
+                      color: "#7f1d1d",
+                      fontWeight: 700,
                     }}
                   >
                     {newErr}
@@ -1261,10 +1607,11 @@ export default function CalendarioAdmin() {
                     style={{
                       padding: "10px 14px",
                       borderRadius: 12,
-                      border: "1px solid #e6b35c",
-                      background: "#fff4df",
+                      border: "1px solid #fdba74",
+                      background: "linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%)",
                       fontWeight: 900,
                       cursor: "pointer",
+                      color: "#7c2d12",
                     }}
                   >
                     Blocca campo
@@ -1276,9 +1623,10 @@ export default function CalendarioAdmin() {
                       style={{
                         padding: "10px 14px",
                         borderRadius: 12,
-                        border: "1px solid #ddd",
+                        border: `1px solid ${borderColor}`,
                         background: "white",
                         fontWeight: 900,
+                        color: "#334155",
                       }}
                     >
                       Chiudi
@@ -1289,10 +1637,11 @@ export default function CalendarioAdmin() {
                       style={{
                         padding: "10px 14px",
                         borderRadius: 12,
-                        border: "none",
-                        background: "#111",
+                        border: "1px solid #1d4ed8",
+                        background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
                         color: "white",
                         fontWeight: 900,
+                        boxShadow: "0 6px 16px rgba(37,99,235,0.25)",
                       }}
                     >
                       Salva prenotazione
@@ -1310,7 +1659,7 @@ export default function CalendarioAdmin() {
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.25)",
+              background: "rgba(15,23,42,0.45)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1323,24 +1672,26 @@ export default function CalendarioAdmin() {
               style={{
                 width: 560,
                 maxWidth: "100%",
-                background: "white",
-                borderRadius: 16,
-                border: "1px solid #eee",
-                padding: 16,
+                background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+                borderRadius: 20,
+                border: `1px solid ${borderColor}`,
+                boxShadow: "0 20px 48px rgba(15,23,42,0.22)",
+                padding: 18,
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 950 }}>Prenotazione</div>
+              <div style={{ fontSize: 19, fontWeight: 950, color: "#0f172a" }}>Prenotazione</div>
 
-              <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.88 }}>
+              <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.9, color: "#334155" }}>
                 <div><b>Nome:</b> {detailBooking.user_name}</div>
                 <div><b>Telefono:</b> {detailBooking.user_phone}</div>
                 <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}-{hhmm(detailBooking.end_ts)} • {date}</div>
+                <div><b>Risorsa:</b> {getResourceName(detailBooking.resource_id) || "-"}</div>
                 <div><b>Totale:</b> {eurFromCents(detailBooking.total_amount_cents ?? null)}</div>
                 <div><b>Stato pagamento:</b> {detailBooking.paid_at ? "Pagata" : "Da pagare"}</div>
                 {detailBooking.payment_note ? <div><b>Nota:</b> {detailBooking.payment_note}</div> : null}
               </div>
 
-              <div style={{ marginTop: 12, borderTop: "1px solid #eee", paddingTop: 12 }}>
+              <div style={{ marginTop: 12, borderTop: `1px solid ${borderColor}`, paddingTop: 12 }}>
                 <div style={{ fontWeight: 950, marginBottom: 8 }}>Segna pagato</div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
@@ -1349,7 +1700,13 @@ export default function CalendarioAdmin() {
                     <input
                       value={payAmount}
                       onChange={(e) => setPayAmount(e.target.value)}
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                      style={{
+                        width: "100%",
+                        padding: 10,
+                        borderRadius: 10,
+                        border: `1px solid ${borderColor}`,
+                        background: "white",
+                      }}
                       placeholder="es. 60,00"
                     />
                   </label>
@@ -1359,7 +1716,13 @@ export default function CalendarioAdmin() {
                     <select
                       value={payMethod}
                       onChange={(e) => setPayMethod(e.target.value as "CASH" | "CARD")}
-                      style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+                      style={{
+                        width: "100%",
+                        padding: 10,
+                        borderRadius: 10,
+                        border: `1px solid ${borderColor}`,
+                        background: "white",
+                      }}
                     >
                       <option value="CASH">Contanti</option>
                       <option value="CARD">Carta</option>
@@ -1372,7 +1735,14 @@ export default function CalendarioAdmin() {
                   <input
                     value={paymentNote}
                     onChange={(e) => setPaymentNote(e.target.value)}
-                    style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd", marginTop: 6 }}
+                    style={{
+                      width: "100%",
+                      padding: 10,
+                      borderRadius: 10,
+                      border: `1px solid ${borderColor}`,
+                      marginTop: 6,
+                      background: "white",
+                    }}
                     placeholder="es. sconto, saldo, promo..."
                   />
                 </label>
@@ -1394,8 +1764,10 @@ export default function CalendarioAdmin() {
                       marginTop: 10,
                       padding: 10,
                       borderRadius: 12,
-                      background: "#fff3f3",
-                      border: "1px solid #ffd2d2",
+                      background: "#fff7f7",
+                      border: "1px solid #ffc7c7",
+                      color: "#7f1d1d",
+                      fontWeight: 700,
                     }}
                   >
                     {detailErr}
@@ -1408,9 +1780,10 @@ export default function CalendarioAdmin() {
                     style={{
                       padding: "10px 14px",
                       borderRadius: 12,
-                      border: "1px solid #ffb3b3",
-                      background: "#fff5f5",
+                      border: "1px solid #fca5a5",
+                      background: "#fff1f2",
                       fontWeight: 950,
+                      color: "#991b1b",
                     }}
                   >
                     Disdici prenotazione
@@ -1422,9 +1795,10 @@ export default function CalendarioAdmin() {
                       style={{
                         padding: "10px 14px",
                         borderRadius: 12,
-                        border: "1px solid #ddd",
+                        border: `1px solid ${borderColor}`,
                         background: "#eef2ff",
                         fontWeight: 950,
+                        color: "#3730a3",
                       }}
                     >
                       Sposta
@@ -1436,11 +1810,11 @@ export default function CalendarioAdmin() {
                       style={{
                         padding: "10px 14px",
                         borderRadius: 12,
-                        border: "1px solid #ddd",
+                        border: `1px solid ${borderColor}`,
                         background: "white",
                         fontWeight: 950,
                         textDecoration: "none",
-                        color: "#111",
+                        color: "#0f172a",
                         display: "inline-flex",
                         alignItems: "center",
                       }}
@@ -1453,10 +1827,11 @@ export default function CalendarioAdmin() {
                       style={{
                         padding: "10px 14px",
                         borderRadius: 12,
-                        border: "none",
-                        background: "#111",
+                        border: "1px solid #1d4ed8",
+                        background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
                         color: "white",
                         fontWeight: 950,
+                        boxShadow: "0 6px 16px rgba(37,99,235,0.25)",
                       }}
                     >
                       Segna pagato
@@ -1478,7 +1853,7 @@ export default function CalendarioAdmin() {
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.3)",
+              background: "rgba(15,23,42,0.5)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1489,8 +1864,10 @@ export default function CalendarioAdmin() {
             <div
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: "white",
-                borderRadius: 16,
+                background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+                borderRadius: 20,
+                border: `1px solid ${borderColor}`,
+                boxShadow: "0 20px 48px rgba(15,23,42,0.22)",
                 padding: 20,
                 width: 420,
                 maxWidth: "100%",
@@ -1509,7 +1886,14 @@ export default function CalendarioAdmin() {
                 <select
                   value={moveResource}
                   onChange={(e) => setMoveResource(e.target.value)}
-                  style={{ width: "100%", padding: 10, marginTop: 4, borderRadius: 10, border: "1px solid #ddd" }}
+                  style={{
+                    width: "100%",
+                    padding: 10,
+                    marginTop: 4,
+                    borderRadius: 10,
+                    border: `1px solid ${borderColor}`,
+                    background: "white",
+                  }}
                 >
                   {orderedResources.map((r) => (
                     <option key={r.id} value={r.id}>{r.name}</option>
@@ -1523,7 +1907,14 @@ export default function CalendarioAdmin() {
                   type="datetime-local"
                   value={moveTime.slice(0, 16)}
                   onChange={(e) => setMoveTime(e.target.value)}
-                  style={{ width: "100%", padding: 10, marginTop: 4, borderRadius: 10, border: "1px solid #ddd" }}
+                  style={{
+                    width: "100%",
+                    padding: 10,
+                    marginTop: 4,
+                    borderRadius: 10,
+                    border: `1px solid ${borderColor}`,
+                    background: "white",
+                  }}
                 />
               </div>
 
@@ -1540,9 +1931,10 @@ export default function CalendarioAdmin() {
                     flex: 1,
                     padding: 12,
                     borderRadius: 12,
-                    border: "1px solid #ddd",
+                    border: `1px solid ${borderColor}`,
                     background: "white",
                     fontWeight: 900,
+                    color: "#334155",
                   }}
                 >
                   Annulla
@@ -1554,10 +1946,11 @@ export default function CalendarioAdmin() {
                     flex: 1,
                     padding: 12,
                     borderRadius: 12,
-                    border: "none",
-                    background: "#111",
+                    border: "1px solid #1d4ed8",
+                    background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
                     color: "white",
                     fontWeight: 900,
+                    boxShadow: "0 6px 16px rgba(37,99,235,0.25)",
                   }}
                 >
                   Salva
@@ -1573,7 +1966,7 @@ export default function CalendarioAdmin() {
             style={{
               position: "fixed",
               inset: 0,
-              background: "rgba(0,0,0,0.25)",
+              background: "rgba(15,23,42,0.45)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1586,16 +1979,18 @@ export default function CalendarioAdmin() {
               style={{
                 width: 500,
                 maxWidth: "100%",
-                background: "white",
-                borderRadius: 16,
-                border: "1px solid #eee",
-                padding: 16,
+                background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+                borderRadius: 20,
+                border: `1px solid ${borderColor}`,
+                boxShadow: "0 20px 48px rgba(15,23,42,0.22)",
+                padding: 18,
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 950 }}>Blocco campo</div>
+              <div style={{ fontSize: 19, fontWeight: 950, color: "#0f172a" }}>Blocco campo</div>
 
-              <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 13 }}>
+              <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 13, color: "#334155" }}>
                 <div><b>Orario:</b> {hhmm(detailBlock.start_ts)}-{hhmm(detailBlock.end_ts)}</div>
+                <div><b>Risorsa:</b> {getResourceName(detailBlock.resource_id) || "-"}</div>
                 <div><b>Motivo:</b> {detailBlock.note || "-"}</div>
               </div>
 
@@ -1605,8 +2000,10 @@ export default function CalendarioAdmin() {
                     marginTop: 10,
                     padding: 10,
                     borderRadius: 12,
-                    background: "#fff3f3",
-                    border: "1px solid #ffd2d2",
+                      background: "#fff7f7",
+                      border: "1px solid #ffc7c7",
+                      color: "#7f1d1d",
+                      fontWeight: 700,
                   }}
                 >
                   {blockErr}
@@ -1619,9 +2016,10 @@ export default function CalendarioAdmin() {
                   style={{
                     padding: "10px 14px",
                     borderRadius: 12,
-                    border: "1px solid #ddd",
+                    border: `1px solid ${borderColor}`,
                     background: "white",
                     fontWeight: 900,
+                    color: "#334155",
                   }}
                 >
                   Chiudi
@@ -1632,9 +2030,10 @@ export default function CalendarioAdmin() {
                   style={{
                     padding: "10px 14px",
                     borderRadius: 12,
-                    border: "1px solid #ffb3b3",
-                    background: "#fff5f5",
+                    border: "1px solid #fca5a5",
+                    background: "#fff1f2",
                     fontWeight: 950,
+                    color: "#991b1b",
                   }}
                 >
                   Elimina blocco
