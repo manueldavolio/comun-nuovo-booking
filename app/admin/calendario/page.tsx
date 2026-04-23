@@ -144,9 +144,9 @@ export default function CalendarioAdmin() {
   const STEP_MIN = 30;
   const { openH, openM, closeH, closeM } = getSchedule();
 
-  const baseTimeColW = 72;
+  const baseTimeColW = 76;
   const baseColW = 300;
-  const baseRowH = 50;
+  const baseRowH = 56;
 
   const timeColW = Math.round(baseTimeColW * zoom);
   const colW = Math.round(baseColW * zoom);
@@ -628,12 +628,15 @@ export default function CalendarioAdmin() {
 
   const [draggingBookingId, setDraggingBookingId] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [hoveredSlotKey, setHoveredSlotKey] = useState<string | null>(null);
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [didMove, setDidMove] = useState(false);
 
   useEffect(() => {
     function stopDrag() {
       setDraggingBookingId(null);
       setDragOverKey(null);
+      setHoveredSlotKey(null);
     }
     window.addEventListener("pointerup", stopDrag);
     window.addEventListener("pointercancel", stopDrag);
@@ -739,6 +742,9 @@ export default function CalendarioAdmin() {
   const softShadow = "0 14px 34px rgba(15, 23, 42, 0.09)";
   const timeBandA = "#fcfdff";
   const timeBandB = "#f3f7fc";
+  const eveningBandA = "#eef3fb";
+  const eveningBandB = "#e4ebf7";
+  const eveningStartHour = 18;
 
   return (
     <div
@@ -1123,34 +1129,42 @@ export default function CalendarioAdmin() {
                 position: "sticky",
                 top: 0,
                 zIndex: 5,
-                background: "linear-gradient(180deg, #eef5ff 0%, #dfe9fb 100%)",
-                borderBottom: "1px solid #bfcee6",
+                background: "linear-gradient(180deg, #edf4ff 0%, #d9e6fb 100%)",
+                borderBottom: "1px solid #b9c9e3",
                 minWidth: minWidth,
                 width: "100%",
               }}
             >
               <div
                 style={{
-                  padding: "11px 10px",
+                  padding: "12px 10px",
                   fontWeight: 900,
-                  borderRight: "2px solid #b6c4da",
-                  background: "rgba(255,255,255,0.55)",
+                  borderRight: "2px solid #acbfdc",
+                  background: "rgba(226,236,250,0.9)",
+                  color: "#334155",
+                  fontSize: 12,
+                  letterSpacing: 0.2,
                 }}
-              />
+              >
+                ORARIO
+              </div>
               {orderedResources.map((r) => (
                 <div
                   key={r.id}
                   style={{
-                    padding: "11px 14px",
-                    fontWeight: 900,
-                    borderRight: "2px solid #b6c4da",
+                    padding: "10px 12px",
+                    fontWeight: 950,
+                    borderRight: "2px solid #acbfdc",
                     whiteSpace: "nowrap",
-                    fontSize: 15,
+                    fontSize: 15.5,
                     color: r.name === EVENTI_NAME ? "#5b21b6" : "#0f172a",
                     background:
                       r.name === EVENTI_NAME
                         ? "linear-gradient(180deg, #f3e8ff 0%, #ede9fe 100%)"
-                        : "transparent",
+                        : "linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(240,246,255,0.92) 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    borderTop: "1px solid rgba(255,255,255,0.55)",
                   }}
                 >
                   {r.name}
@@ -1167,23 +1181,38 @@ export default function CalendarioAdmin() {
                   width: "100%",
                 }}
               >
-              <div style={{ borderRight: "3px solid #c7d2e5", background: "#dce6f7" }}>
+              <div
+                style={{
+                  borderRight: "3px solid #b6c6df",
+                  background: "linear-gradient(180deg, #dce7f8 0%, #d0dff5 100%)",
+                }}
+              >
                 {timeRows.map((t, i) => {
                   const minutes = new Date(t.t).getMinutes();
+                  const hour = new Date(t.t).getUTCHours();
                   const isFullHour = minutes === 0;
                   const hourBand = Math.floor(i / 2) % 2 === 0;
+                  const isEvening = hour >= eveningStartHour;
 
                   return (
                     <div
                       key={i}
                       style={{
                         height: rowH,
-                        padding: "12px 6px",
-                        fontSize: 11,
+                        padding: "14px 8px",
+                        fontSize: 11.5,
                         fontWeight: isFullHour ? 900 : 700,
-                        color: isFullHour ? "#0f172a" : "#475569",
-                        background: hourBand ? timeBandA : timeBandB,
-                        borderBottom: isFullHour ? "2px solid #d2ddef" : "1px solid #e2e8f0",
+                        color: isFullHour ? "#0f172a" : "#334155",
+                        background: isEvening
+                          ? hourBand
+                            ? "#dbe4f3"
+                            : "#d1dced"
+                          : hourBand
+                          ? "#edf3fc"
+                          : "#e5edf8",
+                        borderBottom: isFullHour ? "2px solid #c8d5ea" : "1px solid #d6e0ee",
+                        display: "flex",
+                        alignItems: "center",
                       }}
                     >
                       {t.label}
@@ -1198,19 +1227,34 @@ export default function CalendarioAdmin() {
                     style={{
                       position: "relative",
                       height: gridH,
-                      borderRight: "2px solid #ccd7ea",
+                      borderRight: "2px solid #c7d4e9",
                       background:
                         r.name === EVENTI_NAME
                           ? "linear-gradient(180deg, #faf5ff 0%, #f5f3ff 100%)"
-                          : "#f9fbfe",
+                          : "#f7fafe",
                     }}
                   >
                       {timeRows.map((tr, idx) => {
                         const slotKey = `${r.id}-${tr.t}`;
                         const isDragOver = dragOverKey === slotKey;
+                        const isHovered = hoveredSlotKey === slotKey;
                         const minutes = new Date(tr.t).getMinutes();
+                        const hour = new Date(tr.t).getUTCHours();
                         const isFullHour = minutes === 0;
                         const hourBand = Math.floor(idx / 2) % 2 === 0;
+                        const isEvening = hour >= eveningStartHour;
+                        const baseSlotBg =
+                          r.name === EVENTI_NAME
+                            ? hourBand
+                              ? "#f8f0ff"
+                              : "#f2e9ff"
+                            : isEvening
+                            ? hourBand
+                              ? eveningBandA
+                              : eveningBandB
+                            : hourBand
+                            ? timeBandA
+                            : timeBandB;
 
                         return (
                           <div
@@ -1219,8 +1263,14 @@ export default function CalendarioAdmin() {
                               if (!draggingBookingId) openNewSlot(r.id, tr.t);
                             }}
                             onPointerEnter={() => {
+                              if (!draggingBookingId) setHoveredSlotKey(slotKey);
                               if (!draggingBookingId) return;
                               setDragOverKey(slotKey);
+                            }}
+                            onPointerLeave={() => {
+                              if (hoveredSlotKey === slotKey) setHoveredSlotKey(null);
+                              if (!draggingBookingId) return;
+                              if (dragOverKey === slotKey) setDragOverKey(null);
                             }}
                             onPointerUp={(e) => {
                               e.preventDefault();
@@ -1230,21 +1280,23 @@ export default function CalendarioAdmin() {
                             }}
                             style={{
                               height: rowH,
-                              borderBottom: isFullHour ? "2px solid #d2ddef" : "1px solid #e2e8f0",
+                              borderBottom: isFullHour ? "2px solid #cfdbec" : "1px solid #dfe7f2",
                               cursor: draggingBookingId ? "grabbing" : "pointer",
                               position: "relative",
                               zIndex: 1,
                               background: isDragOver
                                 ? "#dbeafe"
-                                : r.name === EVENTI_NAME
-                                ? hourBand
-                                  ? "#faf5ff"
-                                  : "#f3e8ff"
-                                : hourBand
-                                ? timeBandA
-                                : timeBandB,
+                                : isHovered
+                                ? "linear-gradient(180deg, #eef6ff 0%, #dbeafe 100%)"
+                                : baseSlotBg,
                               outline: isDragOver ? "2px dashed #2563eb" : "none",
                               outlineOffset: -2,
+                              transition:
+                                "background 180ms ease, box-shadow 180ms ease, transform 180ms ease",
+                              boxShadow:
+                                isHovered && !draggingBookingId
+                                  ? "inset 0 0 0 1px rgba(59,130,246,0.22)"
+                                  : "none",
                             }}
                             title="Clicca per inserire prenotazione o bloccare il campo"
                           />
@@ -1258,32 +1310,42 @@ export default function CalendarioAdmin() {
                         const paid = it.type === "BOOKING" ? !!it.booking?.paid_at : false;
                         const resourceName = getResourceName(it.resource_id);
                         const isEventResource = resourceName === EVENTI_NAME;
+                        const isHoveredItem = hoveredItemId === it.id;
 
                         let bookingBg = "#e2e8f0";
                         let bookingBorder = "#cbd5e1";
                         let badgeBg = "#f8fafc";
                         let badgeColor = "#0f172a";
                         if (isBlock) {
-                          bookingBg = isEventResource ? "#fde68a" : "#ffedd5";
-                          bookingBorder = isEventResource ? "#facc15" : "#fdba74";
-                          badgeBg = "#fff7ed";
-                          badgeColor = "#9a3412";
+                          bookingBg = "#fee2e2";
+                          bookingBorder = "#fca5a5";
+                          badgeBg = "#fff1f2";
+                          badgeColor = "#9f1239";
                         } else if (isEventResource) {
-                          bookingBg = paid ? "#ddd6fe" : "#ede9fe";
-                          bookingBorder = paid ? "#a78bfa" : "#c4b5fd";
+                          bookingBg = "#ede9fe";
+                          bookingBorder = "#c4b5fd";
                           badgeBg = "#f5f3ff";
                           badgeColor = "#5b21b6";
+                        } else if (resourceName === "Tendone" && it.sport === "CALCETTO") {
+                          bookingBg = "#dbeafe";
+                          bookingBorder = "#93c5fd";
+                          badgeBg = "#eff6ff";
+                          badgeColor = "#1d4ed8";
+                        } else if (resourceName === "Tendone" && it.sport === "TENNIS") {
+                          bookingBg = "#dcfce7";
+                          bookingBorder = "#86efac";
+                          badgeBg = "#f0fdf4";
+                          badgeColor = "#166534";
                         } else if (paid) {
                           bookingBg = "#dcfce7";
                           bookingBorder = "#86efac";
                           badgeBg = "#f0fdf4";
                           badgeColor = "#166534";
-                        } else if (resourceName === "Tendone" && it.sport === "TENNIS") {
-                          bookingBg = "#dbeafe";
-                          bookingBorder = "#93c5fd";
-                        } else if (resourceName === "Tendone" && it.sport === "CALCETTO") {
-                          bookingBg = "#fde68a";
-                          bookingBorder = "#fbbf24";
+                        } else {
+                          bookingBg = "#ffedd5";
+                          bookingBorder = "#fdba74";
+                          badgeBg = "#fff7ed";
+                          badgeColor = "#9a3412";
                         }
 
                         return (
@@ -1305,17 +1367,21 @@ export default function CalendarioAdmin() {
                               if (it.type === "BOOKING") openDetail(it.booking);
                               if (it.type === "BLOCK") openBlockDetail(it.block);
                             }}
+                            onPointerEnter={() => setHoveredItemId(it.id)}
+                            onPointerLeave={() => {
+                              if (hoveredItemId === it.id) setHoveredItemId(null);
+                            }}
                             title={`${it.title}\n${it.subtitle}`}
                             style={{
                               position: "absolute",
-                              left: 8,
-                              right: 8,
-                              top: top + 2,
-                              height: h - 4,
-                              borderRadius: 12,
+                              left: 6,
+                              right: 6,
+                              top: top + 3,
+                              height: h - 6,
+                              borderRadius: 14,
                               background: bookingBg,
-                              border: `1px solid ${bookingBorder}`,
-                              padding: 8,
+                              border: `2px solid ${bookingBorder}`,
+                              padding: "8px 9px",
                               boxSizing: "border-box",
                               overflow: "hidden",
                               cursor: it.type === "BOOKING" ? "grab" : "pointer",
@@ -1325,7 +1391,12 @@ export default function CalendarioAdmin() {
                               touchAction: "none",
                               userSelect: "none",
                               WebkitUserSelect: "none",
-                              boxShadow: "0 8px 18px rgba(15,23,42,0.14)",
+                              boxShadow: isHoveredItem
+                                ? "0 12px 24px rgba(15,23,42,0.18)"
+                                : "0 6px 14px rgba(15,23,42,0.12)",
+                              transform: isHoveredItem ? "scale(1.012)" : "scale(1)",
+                              transition:
+                                "transform 180ms ease, box-shadow 180ms ease, background 180ms ease",
                             }}
                           >
                             <div
