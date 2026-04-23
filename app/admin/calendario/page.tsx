@@ -85,6 +85,16 @@ function hhmm(iso: string) {
   });
 }
 
+function toLocalDateTimeValue(value: number | string | Date) {
+  const d = new Date(value);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
 function eurFromCents(cents?: number | null) {
   if (cents == null) return "-";
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
@@ -99,12 +109,12 @@ function isWithinSchedule(startISO: string, endISO: string) {
   const start = new Date(startISO);
   const end = new Date(endISO);
   const sameDay =
-    start.getUTCFullYear() === end.getUTCFullYear() &&
-    start.getUTCMonth() === end.getUTCMonth() &&
-    start.getUTCDate() === end.getUTCDate();
+    start.getFullYear() === end.getFullYear() &&
+    start.getMonth() === end.getMonth() &&
+    start.getDate() === end.getDate();
   if (!sameDay) return false;
-  const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
-  const endMinutes = end.getUTCHours() * 60 + end.getUTCMinutes();
+  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const endMinutes = end.getHours() * 60 + end.getMinutes();
   const openMinutes = openH * 60 + openM;
   const closeMinutes = closeH * 60 + closeM;
   return startMinutes >= openMinutes && endMinutes <= closeMinutes && endMinutes > startMinutes;
@@ -173,7 +183,7 @@ export default function CalendarioAdmin() {
     ];
   }, [resources]);
 
-  const dayBase = useMemo(() => new Date(`${date}T00:00:00.000Z`).getTime(), [date]);
+  const dayBase = useMemo(() => new Date(`${date}T00:00:00`).getTime(), [date]);
   const dayStart = useMemo(() => dayBase + (openH * 60 + openM) * 60 * 1000, [dayBase, openH, openM]);
   const dayEnd = useMemo(() => dayBase + (closeH * 60 + closeM) * 60 * 1000, [dayBase, closeH, closeM]);
 
@@ -186,9 +196,10 @@ export default function CalendarioAdmin() {
 
     for (let t = startTs; t < endTs; t += STEP_MIN * 60 * 1000) {
       const d = new Date(t);
-      const label = `${String(d.getUTCHours()).padStart(2, "0")}:${String(
-        d.getUTCMinutes()
-      ).padStart(2, "0")}`;
+      const label = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(
+        2,
+        "0"
+      )}`;
       rows.push({ label, t });
     }
 
@@ -360,7 +371,7 @@ export default function CalendarioAdmin() {
 
   function openNewSlot(resourceId: string, startT: number) {
     setNewResourceId(resourceId);
-    setNewStartISO(new Date(startT).toISOString());
+    setNewStartISO(toLocalDateTimeValue(startT));
     setNewMinutes(60);
     setNewName("");
     setNewPhone("");
@@ -485,7 +496,7 @@ export default function CalendarioAdmin() {
   function openMove(b: Booking) {
     setMoveBookingState(b);
     setMoveResource(b.resource_id);
-    setMoveTime(b.start_ts);
+    setMoveTime(toLocalDateTimeValue(b.start_ts));
     setMoveErr("");
     setMoveOpen(true);
   }
@@ -1189,7 +1200,7 @@ export default function CalendarioAdmin() {
               >
                 {timeRows.map((t, i) => {
                   const minutes = new Date(t.t).getMinutes();
-                  const hour = new Date(t.t).getUTCHours();
+                  const hour = new Date(t.t).getHours();
                   const isFullHour = minutes === 0;
                   const hourBand = Math.floor(i / 2) % 2 === 0;
                   const isEvening = hour >= eveningStartHour;
@@ -1239,7 +1250,7 @@ export default function CalendarioAdmin() {
                         const isDragOver = dragOverKey === slotKey;
                         const isHovered = hoveredSlotKey === slotKey;
                         const minutes = new Date(tr.t).getMinutes();
-                        const hour = new Date(tr.t).getUTCHours();
+                        const hour = new Date(tr.t).getHours();
                         const isFullHour = minutes === 0;
                         const hourBand = Math.floor(idx / 2) % 2 === 0;
                         const isEvening = hour >= eveningStartHour;
@@ -2024,7 +2035,7 @@ export default function CalendarioAdmin() {
                 Orario
                 <input
                   type="datetime-local"
-                  value={moveTime.slice(0, 16)}
+                  value={moveTime}
                   onChange={(e) => setMoveTime(e.target.value)}
                   style={{
                     width: "100%",
