@@ -94,6 +94,22 @@ function getSchedule() {
   return { openH: 9, openM: 0, closeH: 23, closeM: 0 };
 }
 
+function isWithinSchedule(startISO: string, endISO: string) {
+  const { openH, openM, closeH, closeM } = getSchedule();
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  const sameDay =
+    start.getUTCFullYear() === end.getUTCFullYear() &&
+    start.getUTCMonth() === end.getUTCMonth() &&
+    start.getUTCDate() === end.getUTCDate();
+  if (!sameDay) return false;
+  const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
+  const endMinutes = end.getUTCHours() * 60 + end.getUTCMinutes();
+  const openMinutes = openH * 60 + openM;
+  const closeMinutes = closeH * 60 + closeM;
+  return startMinutes >= openMinutes && endMinutes <= closeMinutes && endMinutes > startMinutes;
+}
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -128,8 +144,8 @@ export default function CalendarioAdmin() {
   const STEP_MIN = 30;
   const { openH, openM, closeH, closeM } = getSchedule();
 
-  const baseTimeColW = 64;
-  const baseColW = 230;
+  const baseTimeColW = 72;
+  const baseColW = 300;
   const baseRowH = 50;
 
   const timeColW = Math.round(baseTimeColW * zoom);
@@ -361,6 +377,10 @@ export default function CalendarioAdmin() {
       const endISO = new Date(
         new Date(newStartISO).getTime() + newMinutes * 60 * 1000
       ).toISOString();
+      if (!isWithinSchedule(newStartISO, endISO)) {
+        setNewErr("Orario non valido: l'ultima fascia disponibile termina alle 23:00.");
+        return;
+      }
 
       const r = await fetch("/api/admin/create-booking", {
         method: "POST",
@@ -404,6 +424,10 @@ export default function CalendarioAdmin() {
       const endISO = new Date(
         new Date(newStartISO).getTime() + newMinutes * 60 * 1000
       ).toISOString();
+      if (!isWithinSchedule(newStartISO, endISO)) {
+        setNewErr("Orario non valido: i blocchi devono restare tra 09:00 e 23:00.");
+        return;
+      }
 
       const r = await fetch("/api/admin/create-block", {
         method: "POST",
@@ -478,6 +502,10 @@ export default function CalendarioAdmin() {
 
       const startISO = new Date(moveTime).toISOString();
       const endISO = new Date(new Date(moveTime).getTime() + duration).toISOString();
+      if (!isWithinSchedule(startISO, endISO)) {
+        setMoveErr("Orario non valido: lo slot deve terminare entro le 23:00.");
+        return;
+      }
 
       const r = await fetch("/api/admin/move-booking", {
         method: "POST",
@@ -626,6 +654,12 @@ export default function CalendarioAdmin() {
 
     const startISO = new Date(startT).toISOString();
     const endISO = new Date(startT + durationMs).toISOString();
+    if (!isWithinSchedule(startISO, endISO)) {
+      setMsg("Orario non valido: non puoi superare le 23:00.");
+      setDraggingBookingId(null);
+      setDragOverKey(null);
+      return;
+    }
 
     try {
       const r = await fetch("/api/admin/move-booking", {
@@ -659,7 +693,8 @@ export default function CalendarioAdmin() {
     return topPx(now);
   }, [dayStart, dayEnd]);
 
-  const minWidth = timeColW + orderedResources.length * colW;
+  const minWidth = Math.max(timeColW + orderedResources.length * colW, 1480);
+  const gridTemplate = `${timeColW}px repeat(${orderedResources.length}, minmax(${colW}px, 1fr))`;
   const dayPaidCents = useMemo(
     () => bookings.reduce((sum, b) => sum + (b.paid_amount_cents ?? 0), 0),
     [bookings]
@@ -694,30 +729,32 @@ export default function CalendarioAdmin() {
 
   const selectedNewResource = orderedResources.find((r) => r.id === newResourceId);
 
-  const pageBg = "linear-gradient(180deg, #f7f9fc 0%, #edf2f9 100%)";
-  const panelBg = "rgba(255,255,255,0.92)";
-  const borderColor = "#d9e2ef";
-  const softShadow = "0 10px 28px rgba(15, 23, 42, 0.08)";
+  const pageBg = "linear-gradient(180deg, #f7faff 0%, #ebf1fb 55%, #e7eef9 100%)";
+  const panelBg = "rgba(255,255,255,0.97)";
+  const borderColor = "#d2deee";
+  const softShadow = "0 14px 34px rgba(15, 23, 42, 0.09)";
   const timeBandA = "#fcfdff";
   const timeBandB = "#f3f7fc";
 
   return (
     <div
       style={{
-        padding: 12,
+        padding: "14px clamp(10px, 1.8vw, 26px)",
         minHeight: "100vh",
         background: pageBg,
         colorScheme: "light",
+        width: "100%",
+        boxSizing: "border-box",
       }}
     >
-      <div style={{ maxWidth: 1760, margin: "0 auto" }}>
+      <div style={{ width: "100%", margin: "0 auto" }}>
         <div
           style={{
             background: panelBg,
-            borderRadius: 22,
+            borderRadius: 24,
             border: `1px solid ${borderColor}`,
             boxShadow: softShadow,
-            padding: 14,
+            padding: 18,
             backdropFilter: "blur(4px)",
           }}
         >
@@ -1061,34 +1098,36 @@ export default function CalendarioAdmin() {
             onTouchMove={handleTouchMovePinch}
             onTouchEnd={handleTouchEndPinch}
             style={{
-              marginTop: 14,
+                marginTop: 14,
               border: `1px solid ${borderColor}`,
-              borderRadius: 18,
+                borderRadius: 20,
               overflowX: "auto",
               overflowY: "hidden",
               WebkitOverflowScrolling: "touch",
               touchAction: "pan-x pan-y",
-              background: panelBg,
-              boxShadow: "0 14px 28px rgba(15,23,42,0.08)",
+                background: "linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%)",
+                boxShadow: "0 14px 30px rgba(15,23,42,0.1)",
               backgroundImage:
-                "radial-gradient(circle at 100% 0%, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0) 45%)",
+                "radial-gradient(circle at 100% 0%, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0) 48%)",
+              width: "100%",
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: `${timeColW}px repeat(${orderedResources.length}, ${colW}px)`,
+                gridTemplateColumns: gridTemplate,
                 position: "sticky",
                 top: 0,
                 zIndex: 5,
-                background: "linear-gradient(180deg, #eff6ff 0%, #e2ecfb 100%)",
-                borderBottom: "1px solid #c7d2e5",
+                background: "linear-gradient(180deg, #eef5ff 0%, #dfe9fb 100%)",
+                borderBottom: "1px solid #bfcee6",
                 minWidth: minWidth,
+                width: "100%",
               }}
             >
               <div
                 style={{
-                  padding: 10,
+                  padding: "11px 10px",
                   fontWeight: 900,
                   borderRight: "2px solid #b6c4da",
                   background: "rgba(255,255,255,0.55)",
@@ -1098,11 +1137,11 @@ export default function CalendarioAdmin() {
                 <div
                   key={r.id}
                   style={{
-                    padding: "10px 12px",
+                    padding: "11px 14px",
                     fontWeight: 900,
                     borderRight: "2px solid #b6c4da",
                     whiteSpace: "nowrap",
-                    fontSize: 14,
+                    fontSize: 15,
                     color: r.name === EVENTI_NAME ? "#5b21b6" : "#0f172a",
                     background:
                       r.name === EVENTI_NAME
@@ -1115,8 +1154,16 @@ export default function CalendarioAdmin() {
               ))}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: `${timeColW}px 1fr`, minWidth: minWidth }}>
-              <div style={{ borderRight: "3px solid #c7d2e5", background: "#dfe8f6" }}>
+            <div style={{ position: "relative" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: gridTemplate,
+                  minWidth: minWidth,
+                  width: "100%",
+                }}
+              >
+              <div style={{ borderRight: "3px solid #c7d2e5", background: "#dce6f7" }}>
                 {timeRows.map((t, i) => {
                   const minutes = new Date(t.t).getMinutes();
                   const isFullHour = minutes === 0;
@@ -1141,21 +1188,19 @@ export default function CalendarioAdmin() {
                 })}
               </div>
 
-              <div style={{ position: "relative" }}>
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${orderedResources.length}, ${colW}px)` }}>
-                  {orderedResources.map((r) => (
-                    <div
-                      key={r.id}
-                      style={{
-                        position: "relative",
-                        height: gridH,
-                        borderRight: "2px solid #ccd7ea",
-                        background:
-                          r.name === EVENTI_NAME
-                            ? "linear-gradient(180deg, #faf5ff 0%, #f5f3ff 100%)"
-                            : "#f9fbfe",
-                      }}
-                    >
+                {orderedResources.map((r) => (
+                  <div
+                    key={r.id}
+                    style={{
+                      position: "relative",
+                      height: gridH,
+                      borderRight: "2px solid #ccd7ea",
+                      background:
+                        r.name === EVENTI_NAME
+                          ? "linear-gradient(180deg, #faf5ff 0%, #f5f3ff 100%)"
+                          : "#f9fbfe",
+                    }}
+                  >
                       {timeRows.map((tr, idx) => {
                         const slotKey = `${r.id}-${tr.t}`;
                         const isDragOver = dragOverKey === slotKey;
@@ -1391,45 +1436,44 @@ export default function CalendarioAdmin() {
                           </div>
                         );
                       })}
-                    </div>
-                  ))}
-                </div>
-
-                {nowLineTop !== null && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      right: 0,
-                      top: nowLineTop,
-                      height: 2,
-                      background: "#1e90ff",
-                      opacity: 0.8,
-                      boxShadow: "0 0 0 1px rgba(30,144,255,0.15)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                )}
-                {nowLineTop !== null && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: nowLineTop - 9,
-                      left: 8,
-                      background: "#1d4ed8",
-                      color: "white",
-                      fontSize: 10,
-                      fontWeight: 900,
-                      padding: "2px 7px",
-                      borderRadius: 999,
-                      pointerEvents: "none",
-                      boxShadow: "0 6px 16px rgba(29,78,216,0.35)",
-                    }}
-                  >
-                    Ora
                   </div>
-                )}
+                ))}
               </div>
+
+              {nowLineTop !== null && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: timeColW,
+                    right: 0,
+                    top: nowLineTop,
+                    height: 2,
+                    background: "#1e90ff",
+                    opacity: 0.8,
+                    boxShadow: "0 0 0 1px rgba(30,144,255,0.15)",
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+              {nowLineTop !== null && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: nowLineTop - 9,
+                    left: timeColW + 8,
+                    background: "#1d4ed8",
+                    color: "white",
+                    fontSize: 10,
+                    fontWeight: 900,
+                    padding: "2px 7px",
+                    borderRadius: 999,
+                    pointerEvents: "none",
+                    boxShadow: "0 6px 16px rgba(29,78,216,0.35)",
+                  }}
+                >
+                  Ora
+                </div>
+              )}
             </div>
           </div>
         )}

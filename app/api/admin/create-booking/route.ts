@@ -64,6 +64,19 @@ function formatTimeLabel(startISO: string, endISO: string) {
   return `${dateLabel} • ${timeLabel}`;
 }
 
+function isInsideDailyWindow(startISO: string, endISO: string) {
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  const sameDay =
+    start.getUTCFullYear() === end.getUTCFullYear() &&
+    start.getUTCMonth() === end.getUTCMonth() &&
+    start.getUTCDate() === end.getUTCDate();
+  if (!sameDay) return false;
+  const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
+  const endMinutes = end.getUTCHours() * 60 + end.getUTCMinutes();
+  return startMinutes >= 9 * 60 && endMinutes <= 23 * 60 && endMinutes > startMinutes;
+}
+
 async function sendWhatsAppBookingConfirmation(params: {
   to: string;
   fieldName: string;
@@ -176,6 +189,12 @@ export async function POST(req: Request) {
 
   if (Number(body.minutes) < 60 || Number(body.minutes) > 600) {
     return NextResponse.json({ error: "minutes non validi" }, { status: 400 });
+  }
+  if (!isInsideDailyWindow(body.startISO, body.endISO)) {
+    return NextResponse.json(
+      { error: "Orario non valido: la prenotazione deve restare tra 09:00 e 23:00." },
+      { status: 400 }
+    );
   }
 
   const { data: resRow, error: rErr } = await supabase

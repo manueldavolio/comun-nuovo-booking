@@ -28,6 +28,19 @@ function calcTotalCents(
   return Math.round(perHour * (minutes / 60));
 }
 
+function isInsideDailyWindow(startISO: string, endISO: string) {
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  const sameDay =
+    start.getUTCFullYear() === end.getUTCFullYear() &&
+    start.getUTCMonth() === end.getUTCMonth() &&
+    start.getUTCDate() === end.getUTCDate();
+  if (!sameDay) return false;
+  const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
+  const endMinutes = end.getUTCHours() * 60 + end.getUTCMinutes();
+  return startMinutes >= 9 * 60 && endMinutes <= 23 * 60 && endMinutes > startMinutes;
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
@@ -41,6 +54,12 @@ export async function POST(req: Request) {
 
     if (!(start < end)) {
       return NextResponse.json({ error: "Orario non valido" }, { status: 400 });
+    }
+    if (!isInsideDailyWindow(body.startISO, body.endISO)) {
+      return NextResponse.json(
+        { error: "Orario non valido: lo spostamento deve restare tra 09:00 e 23:00." },
+        { status: 400 }
+      );
     }
 
     const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
