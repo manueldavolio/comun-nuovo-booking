@@ -179,22 +179,21 @@ export default function CalendarioAdmin() {
 
   const timeRows = useMemo(() => {
     const rows: { label: string; t: number }[] = [];
-    const startMinutes = openH * 60 + openM; // 09:00
-    const endMinutes = closeH * 60 + closeM; // 23:00 (limite, non riga visibile)
+    const startMinutes = openH * 60 + openM;
+    const endMinutes = closeH * 60 + closeM;
+    const startTs = dayBase + startMinutes * 60 * 1000;
+    const endTs = dayBase + endMinutes * 60 * 1000;
 
-    for (let minutes = startMinutes; minutes < endMinutes; minutes += STEP_MIN) {
-      const t = dayBase + minutes * 60 * 1000;
-      rows.push({
-        label: new Date(t).toLocaleTimeString("it-IT", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        t,
-      });
+    for (let t = startTs; t < endTs; t += STEP_MIN * 60 * 1000) {
+      const d = new Date(t);
+      const label = `${String(d.getUTCHours()).padStart(2, "0")}:${String(
+        d.getUTCMinutes()
+      ).padStart(2, "0")}`;
+      rows.push({ label, t });
     }
 
     return rows;
-  }, [dayBase, openH, openM, closeH, closeM]);
+  }, [dayBase, openH, openM, closeH, closeM, STEP_MIN]);
 
   const gridH = timeRows.length * rowH;
 
