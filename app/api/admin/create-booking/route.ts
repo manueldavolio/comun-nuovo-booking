@@ -4,6 +4,10 @@ import {
   sendWhatsAppBookingConfirmation,
   upsertCustomerByPhone,
 } from "@/lib/booking-notify";
+import {
+  ensureRomeIso,
+  parseWallClockParts,
+} from "@/lib/datetime-rome";
 import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
@@ -19,66 +23,35 @@ type Body = {
   sport?: "CALCETTO" | "TENNIS" | null;
 };
 
-const CENTER_TIME_ZONE = "Europe/Rome";
-
-function getCenterDateParts(date: Date) {
-  const parts = new Intl.DateTimeFormat("it-IT", {
-    timeZone: CENTER_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-
-  const get = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((p) => p.type === type)?.value ?? "";
-
-  return {
-    year: get("year"),
-    month: get("month"),
-    day: get("day"),
-    hour: get("hour"),
-    minute: get("minute"),
-  };
-}
-
 function isInsideDailyWindow(startISO: string, endISO: string) {
-  const start = new Date(startISO);
-  const end = new Date(endISO);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
-
-  const startParts = getCenterDateParts(start);
-  const endParts = getCenterDateParts(end);
+  const start = parseWallClockParts(startISO);
+  const end = parseWallClockParts(endISO);
+  if (!start || !end) return false;
 
   const sameDay =
-    startParts.year === endParts.year &&
-    startParts.month === endParts.month &&
-    startParts.day === endParts.day;
+    start.year === end.year &&
+    start.month === end.month &&
+    start.day === end.day;
   if (!sameDay) return false;
 
-  const startMinutes = Number(startParts.hour) * 60 + Number(startParts.minute);
-  const endMinutes = Number(endParts.hour) * 60 + Number(endParts.minute);
+  const startMinutes = Number(start.hour) * 60 + Number(start.minute);
+  const endMinutes = Number(end.hour) * 60 + Number(end.minute);
   return startMinutes >= 9 * 60 && endMinutes <= 23 * 60 && endMinutes > startMinutes;
 }
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Body;
-  console.log("CREATE BOOKING PAYLOAD", {
-    resourceId: body?.resourceId,
-    startISO: body?.startISO,
-    endISO: body?.endISO,
-    startLocal: body?.startISO ? new Date(body.startISO).toString() : null,
-    endLocal: body?.endISO ? new Date(body.endISO).toString() : null,
-  });
+  console.log("BACKEND RECEIVED", body.startISO, body.endISO);
+
+  const startISO = ensureRomeIso(body.startISO);
+  const endISO = ensureRomeIso(body.endISO);
 
   const userPhone = body?.userPhone?.trim() ?? "";
 
   if (
     !body?.resourceId ||
-    !body?.startISO ||
-    !body?.endISO ||
+    !startISO ||
+    !endISO ||
     !body?.userName?.trim() ||
     !userPhone
   ) {
@@ -88,7 +61,7 @@ export async function POST(req: Request) {
   if (Number(body.minutes) < 60 || Number(body.minutes) > 600) {
     return NextResponse.json({ error: "minutes non validi" }, { status: 400 });
   }
-  if (!isInsideDailyWindow(body.startISO, body.endISO)) {
+  if (!isInsideDailyWindow(startISO, endISO)) {
     return NextResponse.json(
       { error: "Orario non valido: la prenotazione deve restare tra 09:00 e 23:00." },
       { status: 400 }
@@ -120,7 +93,7 @@ export async function POST(req: Request) {
   const totalCents = calcTotalCents(
     resRow.name,
     body.minutes,
-    body.startISO,
+    startISO,
     normalizedSport
   );
 
@@ -128,8 +101,8 @@ export async function POST(req: Request) {
     resource_id: body.resourceId,
     user_name: body.userName.trim(),
     user_phone: userPhone,
-    start_ts: body.startISO,
-    end_ts: body.endISO,
+    start_ts: startISO,
+    end_ts: endISO,
     status: "CONFIRMED",
     pay_mode: body.payMode ?? "BAR",
     total_amount_cents: totalCents,
@@ -178,7 +151,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    await upsertCustomerByPhone(body.userName.trim(), userPhone, body.startISO, supabase);
+    await upsertCustomerByPhone(body.userName.trim(), userPhone, startISO, supabase);
   } catch (e: any) {
     console.error("Errore aggiornamento rubrica clienti (non bloccante):", e.message);
   }
@@ -192,7 +165,7 @@ export async function POST(req: Request) {
     await sendWhatsAppBookingConfirmation({
       to: userPhone,
       fieldName: fieldLabel,
-      timeLabel: formatBookingTimeLabel(body.startISO, body.endISO),
+      timeLabel: formatBookingTimeLabel(startISO, endISO),
     });
   } catch (e) {
     console.error("Errore invio WhatsApp post-prenotazione:", e);

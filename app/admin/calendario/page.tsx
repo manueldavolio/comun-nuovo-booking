@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  buildRomeIsoEndFromStart,
+  buildRomeIsoFromDateTimeLocal,
+  buildRomeIsoFromTimestamp,
+  parseWallClockParts,
+} from "@/lib/datetime-rome";
 import { calcTotalCents, formatHourlyPriceLabel } from "@/lib/pricing";
 
 type Resource = {
@@ -97,10 +103,6 @@ function toLocalDateTimeValue(value: number | string | Date) {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
-function toLocalDateTimeSeconds(value: number | string | Date) {
-  return `${toLocalDateTimeValue(value)}:00`;
-}
-
 function eurFromCents(cents?: number | null) {
   if (cents == null) return "-";
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
@@ -112,15 +114,16 @@ function getSchedule() {
 
 function isWithinSchedule(startISO: string, endISO: string) {
   const { openH, openM, closeH, closeM } = getSchedule();
-  const start = new Date(startISO);
-  const end = new Date(endISO);
+  const start = parseWallClockParts(startISO);
+  const end = parseWallClockParts(endISO);
+  if (!start || !end) return false;
   const sameDay =
-    start.getFullYear() === end.getFullYear() &&
-    start.getMonth() === end.getMonth() &&
-    start.getDate() === end.getDate();
+    start.year === end.year &&
+    start.month === end.month &&
+    start.day === end.day;
   if (!sameDay) return false;
-  const startMinutes = start.getHours() * 60 + start.getMinutes();
-  const endMinutes = end.getHours() * 60 + end.getMinutes();
+  const startMinutes = Number(start.hour) * 60 + Number(start.minute);
+  const endMinutes = Number(end.hour) * 60 + Number(end.minute);
   const openMinutes = openH * 60 + openM;
   const closeMinutes = closeH * 60 + closeM;
   return startMinutes >= openMinutes && endMinutes <= closeMinutes && endMinutes > startMinutes;
@@ -395,17 +398,10 @@ export default function CalendarioAdmin() {
       return;
     }
     try {
-      const startDate = new Date(newStartISO);
-      const endDate = new Date(startDate.getTime() + newMinutes * 60 * 1000);
-      const startISO = toLocalDateTimeSeconds(startDate);
-      const endISO = toLocalDateTimeSeconds(endDate);
-      console.log("SUBMIT NEW BOOKING", {
-        popupStartValue: newStartISO,
-        computedStartISO: startISO,
-        computedEndISO: endISO,
-        startLocal: startDate.toString(),
-        endLocal: endDate.toString(),
-      });
+      const slotDate = newStartISO.slice(0, 10);
+      const startISO = buildRomeIsoFromDateTimeLocal(newStartISO);
+      const endISO = buildRomeIsoEndFromStart(startISO, newMinutes);
+      console.log("FRONTEND SLOT", slotDate, startISO, endISO);
       if (!isWithinSchedule(startISO, endISO)) {
         setNewErr("Orario non valido: l'ultima fascia disponibile termina alle 23:00.");
         return;
@@ -450,10 +446,8 @@ export default function CalendarioAdmin() {
       const reason = prompt("Motivo blocco campo (es. Allenamento, Manutenzione, Evento)");
       if (!reason) return;
 
-      const startDate = new Date(newStartISO);
-      const endDate = new Date(startDate.getTime() + newMinutes * 60 * 1000);
-      const startISO = startDate.toISOString();
-      const endISO = endDate.toISOString();
+      const startISO = buildRomeIsoFromDateTimeLocal(newStartISO);
+      const endISO = buildRomeIsoEndFromStart(startISO, newMinutes);
       if (!isWithinSchedule(startISO, endISO)) {
         setNewErr("Orario non valido: i blocchi devono restare tra 09:00 e 23:00.");
         return;
@@ -530,8 +524,9 @@ export default function CalendarioAdmin() {
         new Date(moveBookingState.end_ts).getTime() -
         new Date(moveBookingState.start_ts).getTime();
 
-      const startISO = new Date(moveTime).toISOString();
-      const endISO = new Date(new Date(moveTime).getTime() + duration).toISOString();
+      const startISO = buildRomeIsoFromDateTimeLocal(moveTime);
+      const durationMinutes = Math.round(duration / 60000);
+      const endISO = buildRomeIsoEndFromStart(startISO, durationMinutes);
       if (!isWithinSchedule(startISO, endISO)) {
         setMoveErr("Orario non valido: lo slot deve terminare entro le 23:00.");
         return;
@@ -685,8 +680,9 @@ export default function CalendarioAdmin() {
     const durationMs =
       new Date(booking.end_ts).getTime() - new Date(booking.start_ts).getTime();
 
-    const startISO = new Date(startT).toISOString();
-    const endISO = new Date(startT + durationMs).toISOString();
+    const startISO = buildRomeIsoFromTimestamp(startT);
+    const durationMinutes = Math.round(durationMs / 60000);
+    const endISO = buildRomeIsoEndFromStart(startISO, durationMinutes);
     if (!isWithinSchedule(startISO, endISO)) {
       setMsg("Orario non valido: non puoi superare le 23:00.");
       setDraggingBookingId(null);
