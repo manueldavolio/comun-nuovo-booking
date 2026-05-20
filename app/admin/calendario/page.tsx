@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { calcTotalCents, formatHourlyPriceLabel } from "@/lib/pricing";
 
 type Resource = {
   id: string;
@@ -124,13 +125,13 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function pricePreview(resourceName: string, sport: string, minutes: number) {
-  if (resourceName === "Tendone") {
-    const perHour = sport === "TENNIS" ? 1500 : 5000;
-    return Math.round(perHour * (minutes / 60));
-  }
-  if (resourceName === "Palazzetto") return Math.round(6000 * (minutes / 60));
-  return Math.round(5000 * (minutes / 60));
+function pricePreview(
+  resourceName: string,
+  sport: string,
+  minutes: number,
+  bookingDate: string
+) {
+  return calcTotalCents(resourceName, minutes, bookingDate, sport);
 }
 
 export default function CalendarioAdmin() {
@@ -1650,8 +1651,12 @@ export default function CalendarioAdmin() {
                         background: "white",
                       }}
                     >
-                      <option value="CALCETTO">Calcetto - 50 €/ora</option>
-                      <option value="TENNIS">Tennis - 15 €/ora</option>
+                      <option value="CALCETTO">
+                        {formatHourlyPriceLabel("Tendone", newStartISO, "CALCETTO")}
+                      </option>
+                      <option value="TENNIS">
+                        {formatHourlyPriceLabel("Tendone", newStartISO, "TENNIS")}
+                      </option>
                     </select>
                   </label>
                 )}
@@ -1699,7 +1704,14 @@ export default function CalendarioAdmin() {
                 >
                   Stima prezzo:{" "}
                   {selectedNewResource
-                    ? eurFromCents(pricePreview(selectedNewResource.name, newSport, newMinutes))
+                    ? eurFromCents(
+                        pricePreview(
+                          selectedNewResource.name,
+                          newSport,
+                          newMinutes,
+                          newStartISO
+                        )
+                      )
                     : "-"}
                 </div>
 

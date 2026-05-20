@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 import { stripe } from "@/lib/stripe";
 
@@ -13,18 +14,6 @@ type Body = {
 };
 
 const DEPOSIT_CENTS = Number(process.env.BOOKING_DEPOSIT_CENTS || "500");
-
-// Prezzi (centesimi per ora)
-const PRICE_PER_HOUR_CENTS: Record<string, number> = {
-  Palazzetto: 6000, // 60€/h
-  Tendone: 5000, // 50€/h (se il tuo sintetico si chiama Tendone)
-  Sintetico: 5000, // 50€/h (se un domani lo rinomini)
-};
-
-function calcTotalCents(resourceName: string, minutes: number) {
-  const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
-  return Math.round(perHour * (minutes / 60));
-}
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Body;
@@ -50,7 +39,7 @@ export async function POST(req: Request) {
   if (rErr || !resRow) return NextResponse.json({ error: "Resource not found" }, { status: 404 });
   if (!resRow.is_active) return NextResponse.json({ error: "Resource inactive" }, { status: 400 });
 
-  const totalCents = calcTotalCents(resRow.name, body.minutes);
+  const totalCents = calcTotalCents(resRow.name, body.minutes, body.startISO);
   const amountCents = body.payMode === "FULL" ? totalCents : DEPOSIT_CENTS;
 
   // 1) crea booking PENDING_PAYMENT

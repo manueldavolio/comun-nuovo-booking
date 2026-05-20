@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
 type Body = {
@@ -13,29 +14,7 @@ type Body = {
   sport?: "CALCETTO" | "TENNIS" | null;
 };
 
-const PRICE_PER_HOUR_CENTS: Record<string, number> = {
-  Palazzetto: 6000,
-  Tendone: 5000,
-  Sintetico: 5000,
-};
 const CENTER_TIME_ZONE = "Europe/Rome";
-
-function calcTotalCents(
-  resourceName: string,
-  minutes: number,
-  sport?: string | null
-) {
-  const hours = minutes / 60;
-
-  if ((resourceName || "").trim().toLowerCase().includes("tendone")) {
-    if (sport === "TENNIS") return Math.round(hours * 15 * 100);
-    if (sport === "CALCETTO") return Math.round(hours * 50 * 100);
-    return Math.round(5000 * hours);
-  }
-
-  const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
-  return Math.round(perHour * hours);
-}
 
 function normalizePhoneForWhatsApp(phone: string) {
   const digits = (phone || "").replace(/\D/g, "");
@@ -250,7 +229,12 @@ export async function POST(req: Request) {
       : "CALCETTO"
     : null;
 
-  const totalCents = calcTotalCents(resRow.name, body.minutes, normalizedSport);
+  const totalCents = calcTotalCents(
+    resRow.name,
+    body.minutes,
+    body.startISO,
+    normalizedSport
+  );
 
   const insertPayload: Record<string, any> = {
     resource_id: body.resourceId,

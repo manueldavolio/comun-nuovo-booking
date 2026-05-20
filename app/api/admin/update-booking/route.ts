@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
 type Body = {
@@ -10,23 +11,10 @@ type Body = {
   userPhone: string;
 };
 
-const PRICE_PER_HOUR_CENTS: Record<string, number> = {
-  Palazzetto: 6000,
-  Tendone: 5000,
-  Sintetico: 5000,
-  "Saletta palestra": 5000,
-  Spogliatoi: 5000,
-};
-
 function calcMinutes(startISO: string, endISO: string) {
   const start = new Date(startISO).getTime();
   const end = new Date(endISO).getTime();
   return Math.round((end - start) / 60000);
-}
-
-function calcTotalCents(resourceName: string, minutes: number) {
-  const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
-  return Math.round(perHour * (minutes / 60));
 }
 
 export async function POST(req: Request) {
@@ -63,7 +51,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Risorsa non attiva" }, { status: 400 });
     }
 
-    const totalCents = calcTotalCents(resource.name, minutes);
+    const totalCents = calcTotalCents(resource.name, minutes, body.startISO);
 
     const { data: conflict, error: conflictError } = await supabase
       .from("bookings")

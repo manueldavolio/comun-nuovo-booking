@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
 type Body = {
@@ -9,18 +10,6 @@ type Body = {
   userName: string;
   userPhone: string;
 };
-
-// Prezzi (centesimi per ora)
-const PRICE_PER_HOUR_CENTS: Record<string, number> = {
-  Palazzetto: 6000,
-  Tendone: 5000,
-  Sintetico: 5000,
-};
-
-function calcTotalCents(resourceName: string, minutes: number) {
-  const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
-  return Math.round(perHour * (minutes / 60));
-}
 
 function normalizePhoneForWhatsApp(phone: string) {
   const digits = (phone || "").replace(/\D/g, "");
@@ -171,7 +160,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Risorsa non attiva" }, { status: 400 });
   }
 
-  const totalCents = calcTotalCents(resRow.name, body.minutes);
+  const totalCents = calcTotalCents(resRow.name, body.minutes, body.startISO);
 
   const { data, error } = await supabase
     .from("bookings")

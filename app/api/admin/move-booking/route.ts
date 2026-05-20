@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
 type Body = {
@@ -8,26 +9,7 @@ type Body = {
   endISO: string;
 };
 
-const PRICE_PER_HOUR_CENTS: Record<string, number> = {
-  Palazzetto: 6000,
-  Tendone: 5000,
-  Sintetico: 5000,
-};
 const CENTER_TIME_ZONE = "Europe/Rome";
-
-function calcTotalCents(
-  resourceName: string,
-  minutes: number,
-  sport?: "CALCETTO" | "TENNIS" | null
-) {
-  if (resourceName === "Tendone") {
-    if (sport === "TENNIS") return Math.round(1500 * (minutes / 60));
-    return Math.round(5000 * (minutes / 60));
-  }
-
-  const perHour = PRICE_PER_HOUR_CENTS[resourceName] ?? 5000;
-  return Math.round(perHour * (minutes / 60));
-}
 
 function isInsideDailyWindow(startISO: string, endISO: string) {
   const start = new Date(startISO);
@@ -122,7 +104,12 @@ export async function POST(req: Request) {
       sport = oldBooking?.sport === "TENNIS" ? "TENNIS" : "CALCETTO";
     }
 
-    const totalCents = calcTotalCents(resRow.name, minutes, sport);
+    const totalCents = calcTotalCents(
+      resRow.name,
+      minutes,
+      body.startISO,
+      sport
+    );
 
     const updatePayload: any = {
       resource_id: body.resourceId,
