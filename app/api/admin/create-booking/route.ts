@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { isValidEmail, normalizeEmail } from "@/lib/booking-email";
 import {
   formatBookingTimeLabel,
-  notifyBookingConfirmed,
+  sendWhatsAppBookingConfirmation,
   upsertCustomerByPhone,
 } from "@/lib/booking-notify";
 import { calcTotalCents } from "@/lib/pricing";
@@ -14,8 +13,7 @@ type Body = {
   endISO: string;
   minutes: number;
   userName: string;
-  userEmail: string;
-  userPhone?: string;
+  userPhone: string;
   payMode?: "BAR" | "FULL" | "DEPOSIT";
   source?: string | null;
   sport?: "CALCETTO" | "TENNIS" | null;
@@ -75,15 +73,14 @@ export async function POST(req: Request) {
     endLocal: body?.endISO ? new Date(body.endISO).toString() : null,
   });
 
-  const userEmail = normalizeEmail(body?.userEmail ?? "");
+  const userPhone = body?.userPhone?.trim() ?? "";
 
   if (
     !body?.resourceId ||
     !body?.startISO ||
     !body?.endISO ||
     !body?.userName?.trim() ||
-    !userEmail ||
-    !isValidEmail(userEmail)
+    !userPhone
   ) {
     return NextResponse.json({ error: "Dati mancanti" }, { status: 400 });
   }
@@ -127,12 +124,9 @@ export async function POST(req: Request) {
     normalizedSport
   );
 
-  const userPhone = body.userPhone?.trim() || null;
-
   const insertPayload: Record<string, unknown> = {
     resource_id: body.resourceId,
     user_name: body.userName.trim(),
-    user_email: userEmail,
     user_phone: userPhone,
     start_ts: body.startISO,
     end_ts: body.endISO,
@@ -183,12 +177,10 @@ export async function POST(req: Request) {
     );
   }
 
-  if (userPhone) {
-    try {
-      await upsertCustomerByPhone(body.userName.trim(), userPhone, body.startISO, supabase);
-    } catch (e: any) {
-      console.error("Errore aggiornamento rubrica clienti (non bloccante):", e.message);
-    }
+  try {
+    await upsertCustomerByPhone(body.userName.trim(), userPhone, body.startISO, supabase);
+  } catch (e: any) {
+    console.error("Errore aggiornamento rubrica clienti (non bloccante):", e.message);
   }
 
   const fieldLabel =
@@ -196,23 +188,21 @@ export async function POST(req: Request) {
       ? `${resRow.name} (${normalizedSport.toLowerCase()})`
       : resRow.name;
 
-  const timeLabel = formatBookingTimeLabel(body.startISO, body.endISO);
-
-  await notifyBookingConfirmed({
-    customerEmail: userEmail,
-    customerName: body.userName.trim(),
-    fieldName: fieldLabel,
-    timeLabel,
-    bookingId: data.id,
-    totalCents,
-    userPhone,
-  });
+  try {
+    await sendWhatsAppBookingConfirmation({
+      to: userPhone,
+      fieldName: fieldLabel,
+      timeLabel: formatBookingTimeLabel(body.startISO, body.endISO),
+    });
+  } catch (e) {
+    console.error("Errore invio WhatsApp post-prenotazione:", e);
+  }
 
   return NextResponse.json({
     ok: true,
     bookingId: data.id,
     totalCents,
-    customerSaved: !!userPhone,
+    customerSaved: true,
     sport: normalizedSport,
   });
 }

@@ -312,7 +312,7 @@ export default function CalendarioAdmin() {
         start: new Date(b.start_ts).getTime(),
         end: new Date(b.end_ts).getTime(),
         title: b.user_name || "Prenotazione",
-        subtitle: `${hhmm(b.start_ts)}-${hhmm(b.end_ts)} • ${b.user_email || b.user_phone || ""}`,
+        subtitle: `${hhmm(b.start_ts)}-${hhmm(b.end_ts)} • ${b.user_phone ?? ""}`,
         badge: paid ? "Pagata" : "Da pagare",
         booking: b,
         sport,
@@ -371,7 +371,7 @@ export default function CalendarioAdmin() {
   const [newStartISO, setNewStartISO] = useState("");
   const [newMinutes, setNewMinutes] = useState(60);
   const [newName, setNewName] = useState("");
-  const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
   const [newErr, setNewErr] = useState("");
   const [newSport, setNewSport] = useState<"CALCETTO" | "TENNIS">("CALCETTO");
 
@@ -380,7 +380,7 @@ export default function CalendarioAdmin() {
     setNewStartISO(toLocalDateTimeValue(startT));
     setNewMinutes(60);
     setNewName("");
-    setNewEmail("");
+    setNewPhone("");
     setNewErr("");
     setNewSport("CALCETTO");
     setNewOpen(true);
@@ -420,7 +420,7 @@ export default function CalendarioAdmin() {
           endISO,
           minutes: newMinutes,
           userName: newName,
-          userEmail: newEmail,
+          userPhone: newPhone,
           payMode: "BAR",
           sport: newSport,
           // NOTE: per salvare davvero lo sport/prezzo lato backend
@@ -1689,12 +1689,10 @@ export default function CalendarioAdmin() {
                 </label>
 
                 <label>
-                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Email</div>
+                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Telefono</div>
                   <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="nome@email.it"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
                     style={{
                       width: "100%",
                       padding: 10,
@@ -1841,10 +1839,7 @@ export default function CalendarioAdmin() {
 
               <div style={{ marginTop: 6, display: "grid", gap: 4, fontSize: 13, opacity: 0.9, color: "#334155" }}>
                 <div><b>Nome:</b> {detailBooking.user_name}</div>
-                <div><b>Email:</b> {detailBooking.user_email || "-"}</div>
-                {detailBooking.user_phone ? (
-                  <div><b>Telefono:</b> {detailBooking.user_phone}</div>
-                ) : null}
+                <div><b>Telefono:</b> {detailBooking.user_phone || "-"}</div>
                 <div><b>Orario:</b> {hhmm(detailBooking.start_ts)}-{hhmm(detailBooking.end_ts)} • {date}</div>
                 <div><b>Risorsa:</b> {getResourceName(detailBooking.resource_id) || "-"}</div>
                 <div><b>Totale:</b> {eurFromCents(detailBooking.total_amount_cents ?? null)}</div>
