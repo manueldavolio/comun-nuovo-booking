@@ -8,7 +8,7 @@ export async function GET(req: Request) {
 
   let q = supabase
     .from("bookings")
-    .select("id, resource_id, user_name, user_phone, start_ts, end_ts, status, pay_mode, created_at")
+    .select("id, resource_id, user_name, user_phone, user_email, start_ts, end_ts, status, pay_mode, created_at")
     .order("start_ts", { ascending: true })
     .limit(500);
 

@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import { isValidEmail, normalizeEmail } from "@/lib/booking-email";
+import {
+  formatBookingTimeLabel,
+  notifyBookingConfirmed,
+  upsertCustomerByPhone,
+} from "@/lib/booking-notify";
 import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
@@ -8,139 +14,22 @@ type Body = {
   endISO: string;
   minutes: number; // 60 o 90
   userName: string;
-  userPhone: string;
+  userEmail: string;
+  userPhone?: string;
 };
-
-function normalizePhoneForWhatsApp(phone: string) {
-  const digits = (phone || "").replace(/\D/g, "");
-
-  if (!digits) return "";
-  if (digits.startsWith("39")) return digits;
-  if (digits.startsWith("0")) return `39${digits.slice(1)}`;
-
-  return `39${digits}`;
-}
-
-function formatTimeLabel(startISO: string, endISO: string) {
-  const start = new Date(startISO);
-  const end = new Date(endISO);
-
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  return `${pad(start.getHours())}:${pad(start.getMinutes())} - ${pad(
-    end.getHours()
-  )}:${pad(end.getMinutes())}`;
-}
-
-async function sendWhatsAppBookingConfirmation(params: {
-  to: string;
-  fieldName: string;
-  timeLabel: string;
-}) {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (!token || !phoneNumberId) {
-    console.log("WhatsApp non configurato: manca token o phone number id");
-    return;
-  }
-
-  const to = normalizePhoneForWhatsApp(params.to);
-
-  if (!to) {
-    console.log("WhatsApp non inviato: numero non valido");
-    return;
-  }
-
-  const response = await fetch(
-    `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to,
-        type: "template",
-        template: {
-          name: "prenotazione",
-          language: { code: "it" },
-          components: [
-            {
-              type: "body",
-              parameters: [
-                { type: "text", text: params.fieldName },
-                { type: "text", text: params.timeLabel },
-              ],
-            },
-          ],
-        },
-      }),
-    }
-  );
-
-  const json = await response.json();
-
-  if (!response.ok) {
-    console.error("Errore invio WhatsApp:", json);
-  } else {
-    console.log("WhatsApp inviato:", json);
-  }
-}
-
-async function upsertCustomer(name: string, phone: string, bookingDateISO: string) {
-  const { data: existing, error: findError } = await supabase
-    .from("customers")
-    .select("id, bookings_count")
-    .eq("phone", phone)
-    .maybeSingle();
-
-  if (findError) {
-    throw new Error(findError.message);
-  }
-
-  if (!existing) {
-    const { error: insertError } = await supabase.from("customers").insert({
-      name,
-      phone,
-      first_booking_at: bookingDateISO,
-      last_booking_at: bookingDateISO,
-      bookings_count: 1,
-    });
-
-    if (insertError) {
-      throw new Error(insertError.message);
-    }
-
-    return;
-  }
-
-  const { error: updateError } = await supabase
-    .from("customers")
-    .update({
-      name,
-      last_booking_at: bookingDateISO,
-      bookings_count: (existing.bookings_count ?? 0) + 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", existing.id);
-
-  if (updateError) {
-    throw new Error(updateError.message);
-  }
-}
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Body;
+
+  const userEmail = normalizeEmail(body?.userEmail ?? "");
 
   if (
     !body?.resourceId ||
     !body?.startISO ||
     !body?.endISO ||
-    !body?.userName ||
-    !body?.userPhone ||
+    !body?.userName?.trim() ||
+    !userEmail ||
+    !isValidEmail(userEmail) ||
     ![60, 90].includes(Number(body.minutes))
   ) {
     return NextResponse.json({ error: "Dati mancanti/non validi" }, { status: 400 });
@@ -161,13 +50,15 @@ export async function POST(req: Request) {
   }
 
   const totalCents = calcTotalCents(resRow.name, body.minutes, body.startISO);
+  const userPhone = body.userPhone?.trim() || null;
 
   const { data, error } = await supabase
     .from("bookings")
     .insert({
       resource_id: body.resourceId,
-      user_name: body.userName,
-      user_phone: body.userPhone,
+      user_name: body.userName.trim(),
+      user_email: userEmail,
+      user_phone: userPhone,
       start_ts: body.startISO,
       end_ts: body.endISO,
       status: "CONFIRMED",
@@ -183,32 +74,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Slot non disponibile (già prenotato)" }, { status: 409 });
   }
 
-  try {
-    await upsertCustomer(body.userName, body.userPhone, body.startISO);
-  } catch (e: any) {
-    return NextResponse.json(
-      {
-        error: "Prenotazione salvata ma errore aggiornamento rubrica clienti",
-        detail: e.message,
-      },
-      { status: 500 }
-    );
+  if (userPhone) {
+    try {
+      await upsertCustomerByPhone(body.userName.trim(), userPhone, body.startISO, supabase);
+    } catch (e: any) {
+      console.error("Errore aggiornamento rubrica clienti (non bloccante):", e.message);
+    }
   }
 
-  try {
-    await sendWhatsAppBookingConfirmation({
-      to: body.userPhone,
-      fieldName: resRow.name,
-      timeLabel: formatTimeLabel(body.startISO, body.endISO),
-    });
-  } catch (e) {
-    console.error("Errore invio WhatsApp post-prenotazione:", e);
-  }
+  const timeLabel = formatBookingTimeLabel(body.startISO, body.endISO);
+
+  await notifyBookingConfirmed({
+    customerEmail: userEmail,
+    customerName: body.userName.trim(),
+    fieldName: resRow.name,
+    timeLabel,
+    bookingId: data.id,
+    totalCents,
+    userPhone,
+  });
 
   return NextResponse.json({
     ok: true,
     bookingId: data.id,
     totalCents,
-    customerSaved: true,
+    customerSaved: !!userPhone,
   });
 }

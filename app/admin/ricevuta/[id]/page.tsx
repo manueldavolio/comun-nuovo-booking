@@ -155,8 +155,13 @@ export default function RicevutaPage() {
                   <b>Nome:</b> {booking.user_name || "-"}
                 </div>
                 <div>
-                  <b>Telefono:</b> {booking.user_phone || "-"}
+                  <b>Email:</b> {booking.user_email || "-"}
                 </div>
+                {booking.user_phone ? (
+                  <div>
+                    <b>Telefono:</b> {booking.user_phone}
+                  </div>
+                ) : null}
               </div>
             </div>
 

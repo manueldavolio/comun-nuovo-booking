@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isValidEmail, normalizeEmail } from "@/lib/booking-email";
 import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
@@ -8,7 +9,8 @@ type Body = {
   startISO: string;
   endISO: string;
   userName: string;
-  userPhone: string;
+  userEmail: string;
+  userPhone?: string;
 };
 
 function calcMinutes(startISO: string, endISO: string) {
@@ -21,13 +23,16 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
 
+    const userEmail = normalizeEmail(body?.userEmail ?? "");
+
     if (
       !body?.bookingId ||
       !body?.resourceId ||
       !body?.startISO ||
       !body?.endISO ||
-      !body?.userName ||
-      !body?.userPhone
+      !body?.userName?.trim() ||
+      !userEmail ||
+      !isValidEmail(userEmail)
     ) {
       return NextResponse.json({ error: "Dati mancanti" }, { status: 400 });
     }
@@ -52,6 +57,7 @@ export async function POST(req: Request) {
     }
 
     const totalCents = calcTotalCents(resource.name, minutes, body.startISO);
+    const userPhone = body.userPhone?.trim() || null;
 
     const { data: conflict, error: conflictError } = await supabase
       .from("bookings")
@@ -90,8 +96,9 @@ export async function POST(req: Request) {
       .from("bookings")
       .update({
         resource_id: body.resourceId,
-        user_name: body.userName,
-        user_phone: body.userPhone,
+        user_name: body.userName.trim(),
+        user_email: userEmail,
+        user_phone: userPhone,
         start_ts: body.startISO,
         end_ts: body.endISO,
         total_amount_cents: totalCents,
@@ -103,21 +110,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    const { data: existingCustomer } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("phone", body.userPhone)
-      .maybeSingle();
-
-    if (existingCustomer?.id) {
-      await supabase
+    if (userPhone) {
+      const { data: existingCustomer } = await supabase
         .from("customers")
-        .update({
-          name: body.userName,
-          last_booking_at: body.startISO,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existingCustomer.id);
+        .select("id")
+        .eq("phone", userPhone)
+        .maybeSingle();
+
+      if (existingCustomer?.id) {
+        await supabase
+          .from("customers")
+          .update({
+            name: body.userName.trim(),
+            last_booking_at: body.startISO,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingCustomer.id);
+      }
     }
 
     return NextResponse.json({ ok: true, totalCents });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isValidEmail, normalizeEmail } from "@/lib/booking-email";
 import { calcTotalCents } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 import { stripe } from "@/lib/stripe";
@@ -10,7 +11,8 @@ type Body = {
   minutes: number; // 60 o 90
   payMode: "FULL" | "DEPOSIT";
   userName: string;
-  userPhone: string;
+  userEmail: string;
+  userPhone?: string;
 };
 
 const DEPOSIT_CENTS = Number(process.env.BOOKING_DEPOSIT_CENTS || "500");
@@ -18,12 +20,15 @@ const DEPOSIT_CENTS = Number(process.env.BOOKING_DEPOSIT_CENTS || "500");
 export async function POST(req: Request) {
   const body = (await req.json()) as Body;
 
+  const userEmail = normalizeEmail(body?.userEmail ?? "");
+
   if (
     !body?.resourceId ||
     !body?.startISO ||
     !body?.endISO ||
-    !body?.userName ||
-    !body?.userPhone ||
+    !body?.userName?.trim() ||
+    !userEmail ||
+    !isValidEmail(userEmail) ||
     !["FULL", "DEPOSIT"].includes(body.payMode) ||
     ![60, 90].includes(body.minutes)
   ) {
@@ -41,14 +46,15 @@ export async function POST(req: Request) {
 
   const totalCents = calcTotalCents(resRow.name, body.minutes, body.startISO);
   const amountCents = body.payMode === "FULL" ? totalCents : DEPOSIT_CENTS;
+  const userPhone = body.userPhone?.trim() || null;
 
-  // 1) crea booking PENDING_PAYMENT
   const { data: booking, error: bErr } = await supabase
     .from("bookings")
     .insert({
       resource_id: body.resourceId,
-      user_name: body.userName,
-      user_phone: body.userPhone,
+      user_name: body.userName.trim(),
+      user_email: userEmail,
+      user_phone: userPhone,
       start_ts: body.startISO,
       end_ts: body.endISO,
       status: "PENDING_PAYMENT",
@@ -69,7 +75,6 @@ export async function POST(req: Request) {
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
-  // 2) crea checkout stripe
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     payment_method_types: ["card"],

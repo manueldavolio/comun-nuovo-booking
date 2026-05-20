@@ -30,6 +30,7 @@ export async function GET(req: Request) {
           resource_id,
           user_name,
           user_phone,
+          user_email,
           start_ts,
           end_ts,
           status,

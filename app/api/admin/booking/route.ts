@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   const { data, error } = await supabase
     .from("bookings")
     .select(
-      "id,resource_id,user_name,user_phone,start_ts,end_ts,status,pay_mode,total_amount_cents,deposit_amount_cents,paid_amount_cents,paid_method,paid_at,created_at"
+      "id,resource_id,user_name,user_phone,user_email,start_ts,end_ts,status,pay_mode,total_amount_cents,deposit_amount_cents,paid_amount_cents,paid_method,paid_at,created_at"
     )
     .eq("id", id)
     .single();

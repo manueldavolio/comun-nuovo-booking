@@ -40,7 +40,7 @@ export default function PrenotaPage() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [userName, setUserName] = useState("");
-  const [userPhone, setUserPhone] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const [payMode, setPayMode] = useState<"FULL" | "DEPOSIT">("DEPOSIT");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string>("");
@@ -86,7 +86,7 @@ export default function PrenotaPage() {
 
   async function goCheckout() {
     if (!resourceId || !selectedSlot) return setMsg("Seleziona spazio e slot.");
-    if (!userName.trim() || !userPhone.trim()) return setMsg("Inserisci nome e telefono.");
+    if (!userName.trim() || !userEmail.trim()) return setMsg("Inserisci nome e email.");
 
     setLoading(true);
     setMsg("");
@@ -102,7 +102,7 @@ export default function PrenotaPage() {
           minutes,
           payMode,
           userName,
-          userPhone,
+          userEmail,
         }),
       });
 
@@ -119,7 +119,7 @@ export default function PrenotaPage() {
 
   async function bookNow() {
     if (!resourceId || !selectedSlot) return setMsg("Seleziona spazio e slot.");
-    if (!userName.trim() || !userPhone.trim()) return setMsg("Inserisci nome e telefono.");
+    if (!userName.trim() || !userEmail.trim()) return setMsg("Inserisci nome e email.");
 
     setLoading(true);
     setMsg("");
@@ -134,7 +134,7 @@ export default function PrenotaPage() {
           endISO: selectedSlot.endISO,
           minutes,
           userName,
-          userPhone,
+          userEmail,
         }),
       });
 
@@ -250,11 +250,12 @@ export default function PrenotaPage() {
           </label>
 
           <label>
-            <div style={{ fontWeight: 600 }}>Telefono</div>
+            <div style={{ fontWeight: 600 }}>Email</div>
             <input
-              value={userPhone}
-              onChange={(e) => setUserPhone(e.target.value)}
-              placeholder="Es. 3331234567"
+              type="email"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              placeholder="Es. nome@email.it"
               style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
             />
           </label>

@@ -7,7 +7,8 @@ type Booking = {
   id: string;
   resource_id: string;
   user_name: string;
-  user_phone: string;
+  user_phone: string | null;
+  user_email?: string | null;
   start_ts: string;
   end_ts: string;
   status: string;
@@ -128,7 +129,7 @@ export default function AdminPrenotazioni() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              {["Inizio", "Fine", "Spazio", "Nome", "Telefono", "Stato", "Pagamento"].map((h) => (
+              {["Inizio", "Fine", "Spazio", "Nome", "Email", "Stato", "Pagamento"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>
                   {h}
                 </th>
@@ -142,7 +143,7 @@ export default function AdminPrenotazioni() {
                 <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{fmt(b.end_ts)}</td>
                 <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{byId.get(b.resource_id) ?? b.resource_id}</td>
                 <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{b.user_name}</td>
-                <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{b.user_phone}</td>
+                <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{b.user_email || b.user_phone || "-"}</td>
                 <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{b.status}</td>
                 <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{b.pay_mode}</td>
               </tr>

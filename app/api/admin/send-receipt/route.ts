@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { supabase } from "@/lib/supabase";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 export async function POST(req: Request) {
   try {
@@ -31,6 +33,13 @@ export async function POST(req: Request) {
 
     const receiptUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/admin/ricevuta/${bookingId}`;
 
+    if (!resend) {
+      return NextResponse.json(
+        { error: "RESEND_API_KEY non configurata" },
+        { status: 500 }
+      );
+    }
+
     await resend.emails.send({
       from: "Comun Nuovo <onboarding@resend.dev>",
       to: email,
@@ -38,7 +47,8 @@ export async function POST(req: Request) {
       html: `
         <h2>Ricevuta prenotazione</h2>
         <p><b>Nome:</b> ${booking.user_name}</p>
-        <p><b>Telefono:</b> ${booking.user_phone}</p>
+        <p><b>Email:</b> ${booking.user_email || "-"}</p>
+        <p><b>Telefono:</b> ${booking.user_phone || "-"}</p>
         <p><b>Orario:</b> ${booking.start_ts} - ${booking.end_ts}</p>
         <p><b>Totale:</b> ${(booking.total_amount_cents / 100).toFixed(2)} €</p>
         <p>

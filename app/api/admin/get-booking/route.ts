@@ -19,6 +19,7 @@ export async function GET(req: Request) {
         id,
         user_name,
         user_phone,
+        user_email,
         start_ts,
         end_ts,
         total_amount_cents,
