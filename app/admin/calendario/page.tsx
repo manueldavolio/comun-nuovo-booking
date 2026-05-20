@@ -97,6 +97,10 @@ function toLocalDateTimeValue(value: number | string | Date) {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
+function toLocalDateTimeSeconds(value: number | string | Date) {
+  return `${toLocalDateTimeValue(value)}:00`;
+}
+
 function eurFromCents(cents?: number | null) {
   if (cents == null) return "-";
   return (cents / 100).toFixed(2).replace(".", ",") + " €";
@@ -393,8 +397,15 @@ export default function CalendarioAdmin() {
     try {
       const startDate = new Date(newStartISO);
       const endDate = new Date(startDate.getTime() + newMinutes * 60 * 1000);
-      const startISO = startDate.toISOString();
-      const endISO = endDate.toISOString();
+      const startISO = toLocalDateTimeSeconds(startDate);
+      const endISO = toLocalDateTimeSeconds(endDate);
+      console.log("SUBMIT NEW BOOKING", {
+        popupStartValue: newStartISO,
+        computedStartISO: startISO,
+        computedEndISO: endISO,
+        startLocal: startDate.toString(),
+        endLocal: endDate.toString(),
+      });
       if (!isWithinSchedule(startISO, endISO)) {
         setNewErr("Orario non valido: l'ultima fascia disponibile termina alle 23:00.");
         return;

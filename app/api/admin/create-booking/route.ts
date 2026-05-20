@@ -67,6 +67,13 @@ function isInsideDailyWindow(startISO: string, endISO: string) {
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Body;
+  console.log("CREATE BOOKING PAYLOAD", {
+    resourceId: body?.resourceId,
+    startISO: body?.startISO,
+    endISO: body?.endISO,
+    startLocal: body?.startISO ? new Date(body.startISO).toString() : null,
+    endLocal: body?.endISO ? new Date(body.endISO).toString() : null,
+  });
 
   const userEmail = normalizeEmail(body?.userEmail ?? "");
 
@@ -145,9 +152,34 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
+    const rawMessage = error.message || "";
+    const overlapViolation =
+      error.code === "23P01" ||
+      /no_overlaps/i.test(rawMessage) ||
+      /overlap/i.test(rawMessage);
+    const status = overlapViolation ? 409 : 500;
+    const publicError = overlapViolation
+      ? "Slot non disponibile (già prenotato)"
+      : "Errore creazione prenotazione";
+
+    console.error("CREATE BOOKING DB ERROR", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      overlapViolation,
+      insertPayload,
+    });
+
     return NextResponse.json(
-      { error: "Slot non disponibile (già prenotato)" },
-      { status: 409 }
+      {
+        error: publicError,
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      },
+      { status }
     );
   }
 
