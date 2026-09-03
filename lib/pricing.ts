@@ -2,15 +2,13 @@ export type Sport = "CALCETTO" | "TENNIS" | null;
 
 export const CENTER_TIME_ZONE = "Europe/Rome";
 
-/** Dal 1 giugno 2026 la promo calcetto è attiva (fino al 31 maggio prezzi legacy). */
-const PROMO_START_DATE = "2026-06-01";
-
 const DEFAULT_HOUR_CENTS = 5000;
 const TENDONE_TENNIS_HOUR_CENTS = 1500;
 
-const LEGACY_PALAZZETTO_HOUR_CENTS = 6000;
-const LEGACY_SINTETICO_CALCETTO_HOUR_CENTS = 5000;
-const PROMO_CALCETTO_HOUR_CENTS = 3500;
+const PALAZZETTO_WEEKDAY_HOUR_CENTS = 6000;
+const PALAZZETTO_WEEKEND_HOUR_CENTS = 5000;
+const SINTETICO_WEEKDAY_HOUR_CENTS = 5500;
+const SINTETICO_WEEKEND_HOUR_CENTS = 5000;
 
 function normalizeSport(sport?: Sport | string | null): Sport {
   if (sport === "TENNIS") return "TENNIS";
@@ -35,8 +33,12 @@ export function getBookingDateKey(bookingDate: string | Date): string {
   }).format(date);
 }
 
-export function isPromoCalcettoActive(bookingDate: string | Date): boolean {
-  return getBookingDateKey(bookingDate) >= PROMO_START_DATE;
+/** Sabato/domenica in base alla data della prenotazione (Europe/Rome). */
+function isWeekendBooking(bookingDate: string | Date): boolean {
+  const key = getBookingDateKey(bookingDate);
+  const [y, m, d] = key.split("-").map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=dom, 6=sab
+  return day === 0 || day === 6;
 }
 
 /** Prezzo orario in centesimi, in base a risorsa, data prenotazione e sport. */
@@ -47,16 +49,19 @@ export function getHourlyPrice(
 ): number {
   const name = (resourceName || "").trim();
   const normalizedSport = normalizeSport(sport);
+  const weekend = isWeekendBooking(bookingDate);
 
   if (isTendoneOrSintetico(name)) {
     if (normalizedSport === "TENNIS") return TENDONE_TENNIS_HOUR_CENTS;
-    if (isPromoCalcettoActive(bookingDate)) return PROMO_CALCETTO_HOUR_CENTS;
-    return LEGACY_SINTETICO_CALCETTO_HOUR_CENTS;
+    return weekend
+      ? SINTETICO_WEEKEND_HOUR_CENTS
+      : SINTETICO_WEEKDAY_HOUR_CENTS;
   }
 
   if (name === "Palazzetto") {
-    if (isPromoCalcettoActive(bookingDate)) return PROMO_CALCETTO_HOUR_CENTS;
-    return LEGACY_PALAZZETTO_HOUR_CENTS;
+    return weekend
+      ? PALAZZETTO_WEEKEND_HOUR_CENTS
+      : PALAZZETTO_WEEKDAY_HOUR_CENTS;
   }
 
   return DEFAULT_HOUR_CENTS;
