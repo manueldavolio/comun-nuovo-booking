@@ -156,6 +156,11 @@ export default function CalendarioAdmin() {
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
   const [weekSummary, setWeekSummary] = useState<WeekDaySummary[]>([]);
   const [zoom, setZoom] = useState(1);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportMonth, setReportMonth] = useState(() => new Date().getMonth() + 1);
+  const [reportYear, setReportYear] = useState(() => new Date().getFullYear());
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportErr, setReportErr] = useState("");
 
   const pinchStartDistance = useRef<number | null>(null);
   const pinchStartZoom = useRef<number>(1);
@@ -625,6 +630,38 @@ export default function CalendarioAdmin() {
     setBlockDetailOpen(true);
   }
 
+  async function downloadMonthlyReport() {
+    setReportErr("");
+    setReportLoading(true);
+    try {
+      const r = await fetch(
+        `/api/admin/monthly-report?year=${encodeURIComponent(String(reportYear))}&month=${encodeURIComponent(String(reportMonth))}`
+      );
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || "Errore generazione report");
+      }
+      const blob = await r.blob();
+      const disposition = r.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename =
+        match?.[1] ||
+        `Rendicontazione_Comun_Nuovo_${reportMonth}_${reportYear}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setReportErr(e.message || "Errore download report");
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
   async function deleteBlock() {
     if (!detailBlock) return;
 
@@ -993,6 +1030,24 @@ export default function CalendarioAdmin() {
               }}
             >
               {loading ? "Aggiorno..." : "Aggiorna"}
+            </button>
+
+            <button
+              onClick={() => {
+                setReportErr("");
+                setReportOpen(true);
+              }}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid #4338ca",
+                background: "linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)",
+                color: "#3730a3",
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              Report mensile
             </button>
 
             <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1575,6 +1630,166 @@ export default function CalendarioAdmin() {
           </div>
         )}
         </div>
+
+        {reportOpen && (
+          <div
+            onClick={() => setReportOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(15,23,42,0.45)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
+              zIndex: 55,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 420,
+                maxWidth: "100%",
+                background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+                borderRadius: 20,
+                border: `1px solid ${borderColor}`,
+                boxShadow: "0 20px 48px rgba(15,23,42,0.22)",
+                padding: 18,
+              }}
+            >
+              <div style={{ fontSize: 19, fontWeight: 950, color: "#0f172a" }}>
+                Report mensile
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13, color: "#334155" }}>
+                Rendicontazione utilizzo impianti per il Comune (Europe/Rome).
+              </div>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 10,
+                }}
+              >
+                <label>
+                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Mese</div>
+                  <select
+                    value={reportMonth}
+                    onChange={(e) => setReportMonth(Number(e.target.value))}
+                    style={{
+                      width: "100%",
+                      padding: 10,
+                      borderRadius: 10,
+                      border: `1px solid ${borderColor}`,
+                      background: "white",
+                    }}
+                  >
+                    {[
+                      "Gennaio",
+                      "Febbraio",
+                      "Marzo",
+                      "Aprile",
+                      "Maggio",
+                      "Giugno",
+                      "Luglio",
+                      "Agosto",
+                      "Settembre",
+                      "Ottobre",
+                      "Novembre",
+                      "Dicembre",
+                    ].map((label, i) => (
+                      <option key={label} value={i + 1}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <div style={{ fontWeight: 800, fontSize: 12, opacity: 0.7 }}>Anno</div>
+                  <select
+                    value={reportYear}
+                    onChange={(e) => setReportYear(Number(e.target.value))}
+                    style={{
+                      width: "100%",
+                      padding: 10,
+                      borderRadius: 10,
+                      border: `1px solid ${borderColor}`,
+                      background: "white",
+                    }}
+                  >
+                    {Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - 3 + i).map(
+                      (y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </label>
+              </div>
+
+              {reportErr && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 10,
+                    borderRadius: 12,
+                    background: "#fff7f7",
+                    border: "1px solid #ffc7c7",
+                    color: "#7f1d1d",
+                    fontWeight: 700,
+                  }}
+                >
+                  {reportErr}
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  marginTop: 16,
+                  justifyContent: "flex-end",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  onClick={() => setReportOpen(false)}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: `1px solid ${borderColor}`,
+                    background: "white",
+                    fontWeight: 900,
+                    color: "#334155",
+                  }}
+                >
+                  Chiudi
+                </button>
+                <button
+                  onClick={downloadMonthlyReport}
+                  disabled={reportLoading}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid #1d4ed8",
+                    background: reportLoading
+                      ? "linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)"
+                      : "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+                    color: "white",
+                    fontWeight: 900,
+                    cursor: reportLoading ? "wait" : "pointer",
+                    boxShadow: "0 6px 16px rgba(37,99,235,0.25)",
+                  }}
+                >
+                  {reportLoading ? "Genero..." : "Scarica Excel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {newOpen && (
           <div
