@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isValidEmail, normalizeEmail } from "@/lib/booking-email";
-import { calcTotalCents } from "@/lib/pricing";
+import { rescheduledTotal } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
 type Body = {
@@ -56,7 +56,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Risorsa non attiva" }, { status: 400 });
     }
 
-    const totalCents = calcTotalCents(resource.name, minutes, body.startISO);
+    const {data: previous,error: previousError}=await supabase.from("bookings").select("source,resource_id,start_ts,end_ts,total_amount_cents").eq("id",body.bookingId).single();
+    if(previousError)return NextResponse.json({error:"Prenotazione non trovata"},{status:404});
+    const totalCents = rescheduledTotal(previous,body.resourceId,resource.name,minutes,body.startISO);
     const userPhone = body.userPhone?.trim() || null;
 
     const { data: conflict, error: conflictError } = await supabase
@@ -77,7 +79,7 @@ export async function POST(req: Request) {
     }
 
     const { data: blockConflict, error: blockConflictError } = await supabase
-      .from("blocks")
+      .from("admin_blocks")
       .select("id")
       .eq("resource_id", body.resourceId)
       .lt("start_ts", body.endISO)

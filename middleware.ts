@@ -1,7 +1,8 @@
+import { validAdminSession } from "./lib/admin-session";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const isAdminPage = pathname.startsWith("/admin");
@@ -15,6 +16,10 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  if (isAdminApi && !["GET", "HEAD"].includes(req.method) && req.headers.get("origin") !== req.nextUrl.origin) {
+    return NextResponse.json({error:"Origine non autorizzata"}, {status:403});
+  }
+
   // lascia passare login
   if (isLoginPage || isLoginApi) {
     return NextResponse.next();
@@ -22,7 +27,7 @@ export function middleware(req: NextRequest) {
 
   const authCookie = req.cookies.get("admin_auth")?.value;
 
-  if (authCookie === "1") {
+  if (await validAdminSession(authCookie)) {
     return NextResponse.next();
   }
 
