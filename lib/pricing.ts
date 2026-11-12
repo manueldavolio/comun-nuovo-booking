@@ -86,3 +86,14 @@ export function formatHourlyPriceLabel(
   const sportLabel = sport === "TENNIS" ? "Tennis" : "Calcetto";
   return `${sportLabel} - ${euros} €/ora`;
 }
+
+/** Preserve the agreed BGT rate when an administrator moves a reservation. */
+export function rescheduledTotal(previous: {source?:string|null;resource_id:string;start_ts:string;end_ts:string;total_amount_cents:number}|null, resourceId:string, resourceName:string, minutes:number, start:string, sport?:Sport) {
+ if(previous?.source?.startsWith('BGT_MATCH:')){
+  const oldMinutes=(Date.parse(previous.end_ts)-Date.parse(previous.start_ts))/60000;
+  if(previous.resource_id===resourceId&&oldMinutes>0)return Math.round(previous.total_amount_cents*minutes/oldMinutes);
+  if(resourceName==='Palazzetto')return Math.round(5000*minutes/60);
+  if(resourceName==='Tendone')return Math.round(4000*minutes/60);
+ }
+ return calcTotalCents(resourceName,minutes,start,sport);
+}

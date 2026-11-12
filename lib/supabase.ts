@@ -1,10 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const serverKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// MVP: usiamo anon key server-side assumendo RLS OFF.
-// Più avanti mettiamo SERVICE_ROLE + RLS per sicurezza.
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Server routes only. Never import this module into a client component.
+export const supabase = createClient(supabaseUrl, serverKey, {
   auth: { persistSession: false },
 });

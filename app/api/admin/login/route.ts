@@ -1,3 +1,4 @@
+import { createAdminSession } from "@/lib/admin-session";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -22,11 +23,12 @@ export async function POST(req: Request) {
 
   const res = NextResponse.json({ ok: true });
 
-  res.cookies.set("admin_auth", "1", {
+  res.cookies.set("admin_auth", await createAdminSession(), {
     httpOnly: true,
     path: "/",
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: 60 * 60 * 24,
+    secure: process.env.NODE_ENV === "production",
   });
 
   return res;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { calcTotalCents } from "@/lib/pricing";
+import { rescheduledTotal } from "@/lib/pricing";
 import { supabase } from "@/lib/supabase";
 
 type Body = {
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
     // recupero booking attuale per sapere sport esistente
     const { data: oldBooking } = await supabase
       .from("bookings")
-      .select("sport")
+      .select("sport,source,resource_id,start_ts,end_ts,total_amount_cents,payment_note")
       .eq("id", body.bookingId)
       .single();
 
@@ -104,7 +104,8 @@ export async function POST(req: Request) {
       sport = oldBooking?.sport === "TENNIS" ? "TENNIS" : "CALCETTO";
     }
 
-    const totalCents = calcTotalCents(
+    const totalCents = rescheduledTotal(
+      oldBooking, body.resourceId,
       resRow.name,
       minutes,
       body.startISO,
@@ -117,7 +118,7 @@ export async function POST(req: Request) {
       end_ts: end.toISOString(),
       total_amount_cents: totalCents,
       sport: sport,
-      payment_note: sport ? `SPORT:${sport}` : null,
+      payment_note: oldBooking?.source?.startsWith("BGT_MATCH:") ? oldBooking.payment_note : sport ? `SPORT:${sport}` : null,
     };
 
     const { data, error } = await supabase
